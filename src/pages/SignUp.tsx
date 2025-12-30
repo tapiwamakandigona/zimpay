@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
 import './Auth.css'
+
+type ValidationStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
 
 export function SignUp() {
     const [formData, setFormData] = useState({
@@ -18,9 +20,99 @@ export function SignUp() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
+    // Real-time validation states
+    const [usernameStatus, setUsernameStatus] = useState<ValidationStatus>('idle')
+    const [phoneStatus, setPhoneStatus] = useState<ValidationStatus>('idle')
+    const [emailStatus, setEmailStatus] = useState<ValidationStatus>('idle')
+
     const { signUp } = useAuth()
     const { theme, toggleTheme } = useTheme()
     const navigate = useNavigate()
+
+    // Debounced username check
+    useEffect(() => {
+        if (formData.username.length < 3) {
+            setUsernameStatus('idle')
+            return
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+            setUsernameStatus('invalid')
+            return
+        }
+
+        setUsernameStatus('checking')
+        const timer = setTimeout(async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('username', formData.username.toLowerCase())
+                .maybeSingle()
+
+            setUsernameStatus(data ? 'taken' : 'available')
+        }, 500)
+
+        return () => clearTimeout(timer)
+    }, [formData.username])
+
+    // Debounced phone check
+    useEffect(() => {
+        const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
+        if (cleanPhone.length < 10) {
+            setPhoneStatus('idle')
+            return
+        }
+
+        setPhoneStatus('checking')
+        const timer = setTimeout(async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('phone_number')
+                .eq('phone_number', cleanPhone)
+                .maybeSingle()
+
+            setPhoneStatus(data ? 'taken' : 'available')
+        }, 500)
+
+        return () => clearTimeout(timer)
+    }, [formData.phoneNumber])
+
+    // Debounced email check
+    useEffect(() => {
+        if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+            setEmailStatus('idle')
+            return
+        }
+
+        setEmailStatus('checking')
+        const timer = setTimeout(async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('email', formData.email.toLowerCase())
+                .maybeSingle()
+
+            setEmailStatus(data ? 'taken' : 'available')
+        }, 500)
+
+        return () => clearTimeout(timer)
+    }, [formData.email])
+
+    // Helper to render validation indicator
+    const renderValidationIcon = useCallback((status: ValidationStatus) => {
+        switch (status) {
+            case 'checking':
+                return <span className="validation-icon checking">⏳</span>
+            case 'available':
+                return <span className="validation-icon available">✓</span>
+            case 'taken':
+                return <span className="validation-icon taken">✗</span>
+            case 'invalid':
+                return <span className="validation-icon invalid">⚠</span>
+            default:
+                return null
+        }
+    }, [])
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData(prev => ({
@@ -139,7 +231,7 @@ export function SignUp() {
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="username">Username</label>
+                            <label htmlFor="username">Username {renderValidationIcon(usernameStatus)}</label>
                             <input
                                 type="text"
                                 id="username"
@@ -149,12 +241,15 @@ export function SignUp() {
                                 placeholder="johndoe"
                                 required
                                 autoComplete="username"
+                                className={usernameStatus === 'taken' ? 'input-error' : usernameStatus === 'available' ? 'input-success' : ''}
                             />
+                            {usernameStatus === 'taken' && <small className="field-error">Username already taken</small>}
+                            {usernameStatus === 'invalid' && <small className="field-error">Letters, numbers, underscores only</small>}
                         </div>
                     </div>
 
                     <div className="form-group">
-                        <label htmlFor="email">Email Address</label>
+                        <label htmlFor="email">Email Address {renderValidationIcon(emailStatus)}</label>
                         <input
                             type="email"
                             id="email"
@@ -164,11 +259,13 @@ export function SignUp() {
                             placeholder="john@example.com"
                             required
                             autoComplete="email"
+                            className={emailStatus === 'taken' ? 'input-error' : emailStatus === 'available' ? 'input-success' : ''}
                         />
+                        {emailStatus === 'taken' && <small className="field-error">Email already registered</small>}
                     </div>
 
                     <div className="form-group">
-                        <label htmlFor="phoneNumber">Phone Number</label>
+                        <label htmlFor="phoneNumber">Phone Number {renderValidationIcon(phoneStatus)}</label>
                         <input
                             type="tel"
                             id="phoneNumber"
@@ -178,7 +275,9 @@ export function SignUp() {
                             placeholder="+263 77 123 4567"
                             required
                             autoComplete="tel"
+                            className={phoneStatus === 'taken' ? 'input-error' : phoneStatus === 'available' ? 'input-success' : ''}
                         />
+                        {phoneStatus === 'taken' && <small className="field-error">Phone number already registered</small>}
                     </div>
 
                     <div className="form-row">
@@ -242,7 +341,7 @@ export function SignUp() {
                 <p className="brand-footer">
                     Designed & Built by <a href="https://tapiwamakandigona.github.io/portfolio/" target="_blank" rel="noopener noreferrer">Tapiwa Makandigona</a>
                 </p>
-            </div>
-        </div>
+            </div >
+        </div >
     )
 }

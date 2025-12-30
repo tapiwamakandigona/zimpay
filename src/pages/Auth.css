@@ -515,3 +515,54 @@
         overflow-y: auto;
     }
 }
+
+/* Real-time Validation Styles */
+.validation-icon {
+    margin-left: 8px;
+    font-size: 0.9em;
+}
+
+.validation-icon.checking {
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.validation-icon.available {
+    color: #10b981;
+}
+
+.validation-icon.taken {
+    color: #ef4444;
+}
+
+.validation-icon.invalid {
+    color: #f59e0b;
+}
+
+.field-error {
+    display: block;
+    color: #ef4444;
+    font-size: 0.75rem;
+    margin-top: 4px;
+}
+
+.input-error {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+}
+
+.input-success {
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
