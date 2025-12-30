@@ -5,6 +5,83 @@ import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
 import './Auth.css'
 
+// Country codes for phone normalization
+const COUNTRY_CODES: { [key: string]: string } = {
+    '263': 'ZW', // Zimbabwe
+    '27': 'ZA',  // South Africa
+    '254': 'KE', // Kenya
+    '234': 'NG', // Nigeria
+    '44': 'UK',  // United Kingdom
+    '1': 'US',   // USA/Canada
+    '91': 'IN',  // India
+    '61': 'AU',  // Australia
+}
+
+// Normalize phone number to a standard format for comparison
+const normalizePhone = (phone: string): string[] => {
+    // Remove all non-digit characters except leading +
+    let cleaned = phone.replace(/[^\d+]/g, '')
+
+    // If starts with +, remove it and keep the rest
+    if (cleaned.startsWith('+')) {
+        cleaned = cleaned.substring(1)
+    }
+
+    // If starts with 00 (international prefix), remove it
+    if (cleaned.startsWith('00')) {
+        cleaned = cleaned.substring(2)
+    }
+
+    // Generate all possible formats to check
+    const formats: string[] = []
+
+    // If starts with 0 (local format), generate international variants
+    if (cleaned.startsWith('0')) {
+        const localNumber = cleaned.substring(1) // Remove leading 0
+
+        // Add common country code variants
+        formats.push(`263${localNumber}`)  // Zimbabwe
+        formats.push(`27${localNumber}`)   // South Africa
+        formats.push(`254${localNumber}`)  // Kenya
+        formats.push(`234${localNumber}`)  // Nigeria
+        formats.push(`44${localNumber}`)   // UK
+        formats.push(`1${localNumber}`)    // US
+        formats.push(`91${localNumber}`)   // India
+        formats.push(cleaned)              // Original with 0
+        formats.push(localNumber)          // Without leading 0
+    } else {
+        // Already international format
+        formats.push(cleaned)
+
+        // Also check with leading 0 (local format)
+        // Try to detect country code and add local variant
+        for (const code of Object.keys(COUNTRY_CODES)) {
+            if (cleaned.startsWith(code)) {
+                const localPart = cleaned.substring(code.length)
+                formats.push(`0${localPart}`)
+                break
+            }
+        }
+    }
+
+    // Also add + prefixed versions
+    const withPlus = formats.map(f => `+${f}`)
+
+    return [...new Set([...formats, ...withPlus])] // Remove duplicates
+}
+
+// Get the preferred storage format (international with country code)
+const getStorageFormat = (phone: string): string => {
+    let cleaned = phone.replace(/[^\d]/g, '')
+
+    // If starts with 0, default to Zimbabwe (+263)
+    if (cleaned.startsWith('0')) {
+        cleaned = '263' + cleaned.substring(1)
+    }
+
+    return cleaned
+}
+
 type ValidationStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
 
 export function SignUp() {
@@ -65,10 +142,14 @@ export function SignUp() {
 
         setPhoneStatus('checking')
         const timer = setTimeout(async () => {
+            // Get all possible phone formats to check
+            const phoneFormats = normalizePhone(cleanPhone)
+
+            // Check if any format exists in the database
             const { data } = await supabase
                 .from('profiles')
                 .select('phone_number')
-                .eq('phone_number', cleanPhone)
+                .in('phone_number', phoneFormats)
                 .maybeSingle()
 
             setPhoneStatus(data ? 'taken' : 'available')
@@ -166,12 +247,13 @@ export function SignUp() {
             return
         }
 
-        // Check for duplicate phone number
+        // Check for duplicate phone number (check all normalized formats)
         const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
+        const phoneFormats = normalizePhone(cleanPhone)
         const { data: existingPhone } = await supabase
             .from('profiles')
             .select('phone_number')
-            .eq('phone_number', cleanPhone)
+            .in('phone_number', phoneFormats)
             .maybeSingle()
 
         if (existingPhone) {
@@ -180,10 +262,13 @@ export function SignUp() {
             return
         }
 
+        // Store phone in normalized international format
+        const normalizedPhone = getStorageFormat(cleanPhone)
+
         const { error } = await signUp(formData.email, formData.password, {
             full_name: formData.fullName,
             username: formData.username.toLowerCase(),
-            phone_number: formData.phoneNumber.replace(/\s/g, '')
+            phone_number: normalizedPhone
         })
 
         if (error) {
