@@ -16,6 +16,8 @@ export function Dashboard() {
     const [loading, setLoading] = useState(true)
     const [showSendMoney, setShowSendMoney] = useState(false)
     const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home')
+    const [profileTimeout, setProfileTimeout] = useState(false)
+    const [retrying, setRetrying] = useState(false)
 
     // Profile Edit States
     const [isEditing, setIsEditing] = useState(false)
@@ -23,6 +25,25 @@ export function Dashboard() {
     const [editPhone, setEditPhone] = useState('')
     const [updateMessage, setUpdateMessage] = useState({ type: '', text: '' })
     const [isResetting, setIsResetting] = useState(false)
+
+    // Timeout for profile loading - if no profile after 5 seconds, show retry
+    useEffect(() => {
+        if (!profile && user) {
+            const timeout = setTimeout(() => {
+                setProfileTimeout(true)
+            }, 5000)
+            return () => clearTimeout(timeout)
+        } else {
+            setProfileTimeout(false)
+        }
+    }, [profile, user])
+
+    const handleRetryProfile = async () => {
+        setRetrying(true)
+        setProfileTimeout(false)
+        await refreshProfile()
+        setRetrying(false)
+    }
 
     useEffect(() => {
         if (!user) {
@@ -160,22 +181,43 @@ export function Dashboard() {
             <div className="loading-screen">
                 <div className="loading-content">
                     <div className="loading-logo">💳</div>
-                    <div className="spinner"></div>
-                    <p className="loading-text">Fetching your account...</p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="btn btn-outline"
-                        style={{ marginTop: '1rem', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
-                    >
-                        Click to Retry
-                    </button>
-                    <button
-                        onClick={() => refreshProfile()}
-                        className="btn btn-primary"
-                        style={{ marginTop: '0.5rem' }}
-                    >
-                        Initialize Account
-                    </button>
+                    {retrying ? (
+                        <>
+                            <div className="spinner"></div>
+                            <p className="loading-text">Retrying...</p>
+                        </>
+                    ) : profileTimeout ? (
+                        <>
+                            <p className="loading-text" style={{ color: '#fbbf24' }}>
+                                ⚠️ Taking longer than expected...
+                            </p>
+                            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                                Your profile may not exist or there's a connection issue.
+                            </p>
+                            <button
+                                onClick={handleRetryProfile}
+                                className="btn btn-primary"
+                                style={{ marginTop: '0.5rem' }}
+                            >
+                                🔄 Retry Loading
+                            </button>
+                            <button
+                                onClick={() => {
+                                    signOut()
+                                    navigate('/login')
+                                }}
+                                className="btn btn-outline"
+                                style={{ marginTop: '0.5rem', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
+                            >
+                                Sign Out & Try Again
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="spinner"></div>
+                            <p className="loading-text">Fetching your account...</p>
+                        </>
+                    )}
                 </div>
             </div>
         )
