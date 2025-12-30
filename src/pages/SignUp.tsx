@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { supabase } from '../lib/supabase'
 import './Auth.css'
 
 export function SignUp() {
@@ -59,6 +60,33 @@ export function SignUp() {
         }
 
         setLoading(true)
+
+        // Check for duplicate username
+        const { data: existingUsername } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('username', formData.username.toLowerCase())
+            .maybeSingle()
+
+        if (existingUsername) {
+            setError('This username is already taken. Please choose another.')
+            setLoading(false)
+            return
+        }
+
+        // Check for duplicate phone number
+        const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
+        const { data: existingPhone } = await supabase
+            .from('profiles')
+            .select('phone_number')
+            .eq('phone_number', cleanPhone)
+            .maybeSingle()
+
+        if (existingPhone) {
+            setError('This phone number is already registered.')
+            setLoading(false)
+            return
+        }
 
         const { error } = await signUp(formData.email, formData.password, {
             full_name: formData.fullName,
