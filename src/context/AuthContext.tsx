@@ -27,30 +27,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true)
 
     const fetchProfile = async (userId: string): Promise<Profile | null> => {
+        console.log('🔍 [PROFILE FETCH] Starting fetch for userId:', userId)
+        console.log('🔍 [PROFILE FETCH] User agent:', navigator.userAgent)
+        console.log('🔍 [PROFILE FETCH] Is mobile:', /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+        
         // Retry logic with exponential backoff for mobile networks
         const maxRetries = 3
         const baseDelay = 1000 // 1 second base delay
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
+            console.log(`🔍 [PROFILE FETCH] Attempt ${attempt + 1}/${maxRetries}`)
+            
             try {
+                console.log('🔍 [PROFILE FETCH] Querying profiles table...')
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', userId)
                     .single()
 
+                console.log('🔍 [PROFILE FETCH] Query result - data:', data, 'error:', error)
+
                 if (error) {
-                    console.log(`Error fetching profile (attempt ${attempt + 1}/${maxRetries}):`, error.message)
+                    console.log(`🔍 [PROFILE FETCH] Error fetching profile (attempt ${attempt + 1}/${maxRetries}):`, error.message, error.code, error.hint)
 
                     // If profile fetch fails for ANY reason (not found, etc), try to create one
                     // This is safer for new users who might be missing a profile
-                    console.log('Attempting to create new profile...')
+                    console.log('🔍 [PROFILE FETCH] Attempting to create new profile...')
 
                     // Get user metadata from auth
-                    const { data: { user: authUser } } = await supabase.auth.getUser()
+                    console.log('🔍 [PROFILE FETCH] Getting user from auth...')
+                    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+
+                    if (authError) {
+                        console.error('🔍 [PROFILE FETCH] Error getting auth user:', authError)
+                    }
+                    
+                    console.log('🔍 [PROFILE FETCH] Auth user:', authUser)
 
                     if (authUser) {
                         const metadata = authUser.user_metadata
+                        console.log('🔍 [PROFILE FETCH] User metadata:', metadata)
+                        
                         const newProfile = {
                             id: userId,
                             email: authUser.email,
@@ -62,38 +80,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             updated_at: new Date().toISOString()
                         }
 
+                        console.log('🔍 [PROFILE FETCH] Creating profile:', newProfile)
+
                         const { data: createdProfile, error: createError } = await supabase
                             .from('profiles')
                             .insert(newProfile)
                             .select()
                             .single()
 
+                        console.log('🔍 [PROFILE FETCH] Create result - data:', createdProfile, 'error:', createError)
+
                         if (createError) {
-                            console.error('Error creating profile:', createError)
+                            console.error('🔍 [PROFILE FETCH] Error creating profile:', createError.message, createError.code, createError.hint)
                             // If creation fails (e.g. duplicate), return null
                             return null
                         }
 
-                        console.log('Profile created successfully')
+                        console.log('🔍 [PROFILE FETCH] Profile created successfully')
                         return createdProfile as Profile
                     }
 
                     return null
                 }
+                
+                console.log('🔍 [PROFILE FETCH] Profile fetched successfully:', data)
                 return data as Profile
             } catch (err) {
-                console.error(`Profile fetch error (attempt ${attempt + 1}/${maxRetries}):`, err)
+                console.error(`🔍 [PROFILE FETCH] Unexpected error (attempt ${attempt + 1}/${maxRetries}):`, err)
                 
                 // If not the last attempt, wait before retrying
                 if (attempt < maxRetries - 1) {
                     const delay = baseDelay * Math.pow(2, attempt) // Exponential backoff
-                    console.log(`Retrying profile fetch in ${delay}ms...`)
+                    console.log(`🔍 [PROFILE FETCH] Retrying in ${delay}ms...`)
                     await new Promise(resolve => setTimeout(resolve, delay))
                 }
             }
         }
         
-        console.error('Profile fetch failed after all retries')
+        console.error('🔍 [PROFILE FETCH] Failed after all retries')
         return null
     }
 

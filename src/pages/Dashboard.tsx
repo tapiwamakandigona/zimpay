@@ -29,8 +29,11 @@ export function Dashboard() {
     // Timeout for profile loading - if no profile after 10 seconds, show retry
     // Increased timeout for mobile compatibility
     useEffect(() => {
+        console.log('📊 [DASHBOARD] Profile state check - profile:', profile, 'user:', user)
         if (!profile && user) {
+            console.log('📊 [DASHBOARD] No profile found, starting 10s timeout...')
             const timeout = setTimeout(() => {
+                console.log('📊 [DASHBOARD] Profile timeout reached - showing retry UI')
                 setProfileTimeout(true)
             }, 10000)
             return () => clearTimeout(timeout)
