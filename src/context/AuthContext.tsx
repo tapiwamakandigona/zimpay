@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 password,
                 options: {
                     data: metadata,
-                    emailRedirectTo: `${window.location.origin}/email-verified`
+                    emailRedirectTo: `${window.location.origin}${window.location.pathname}#/email-verified`
                 }
             })
             return { error: error as Error | null }
@@ -191,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const resetPassword = async (email: string) => {
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/update-password`,
+                redirectTo: `${window.location.origin}${window.location.pathname}#/update-password`,
             })
             return { error: error as Error | null }
         } catch (err) {

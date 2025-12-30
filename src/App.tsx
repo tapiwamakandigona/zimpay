@@ -1,6 +1,8 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { supabase } from './lib/supabase'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { SignUp } from './pages/SignUp'
@@ -9,6 +11,58 @@ import { EmailVerified } from './pages/EmailVerified'
 import { Dashboard } from './pages/Dashboard'
 import { UpdatePassword } from './pages/UpdatePassword'
 import './App.css'
+
+// Handle Supabase auth callbacks (email verification, password reset)
+// This runs before HashRouter to process tokens in the URL hash
+function useAuthCallback() {
+  const [isProcessing, setIsProcessing] = useState(true)
+  const [redirectTo, setRedirectTo] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      const hash = window.location.hash
+
+      // Check if this is a Supabase auth callback (contains access_token or type=)
+      if (hash && (hash.includes('access_token') || hash.includes('type='))) {
+        try {
+          // Extract the hash fragment (remove the leading #)
+          const hashParams = new URLSearchParams(hash.substring(1))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          const type = hashParams.get('type')
+
+          if (accessToken && refreshToken) {
+            // Set the session with the tokens
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            })
+
+            // Determine redirect based on type
+            if (type === 'recovery') {
+              setRedirectTo('#/update-password')
+            } else if (type === 'signup' || type === 'email') {
+              setRedirectTo('#/email-verified')
+            } else {
+              setRedirectTo('#/dashboard')
+            }
+
+            // Clean the URL by removing the hash params
+            window.history.replaceState(null, '', window.location.pathname)
+          }
+        } catch (error) {
+          console.error('Auth callback error:', error)
+        }
+      }
+
+      setIsProcessing(false)
+    }
+
+    handleAuthCallback()
+  }, [])
+
+  return { isProcessing, redirectTo }
+}
 
 function LoadingScreen({ message }: { message: string }) {
   return (
@@ -89,6 +143,22 @@ function AppRoutes() {
 }
 
 function App() {
+  const { isProcessing, redirectTo } = useAuthCallback()
+
+  // Show loading while processing auth callback
+  if (isProcessing) {
+    return (
+      <ThemeProvider>
+        <LoadingScreen message="Verifying your account..." />
+      </ThemeProvider>
+    )
+  }
+
+  // If we processed an auth callback, redirect to the appropriate page
+  if (redirectTo) {
+    window.location.hash = redirectTo
+  }
+
   return (
     <ThemeProvider>
       <AuthProvider>
