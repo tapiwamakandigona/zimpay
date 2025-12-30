@@ -27,59 +27,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true)
 
     const fetchProfile = async (userId: string): Promise<Profile | null> => {
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single()
+        // Retry logic with exponential backoff for mobile networks
+        const maxRetries = 3
+        const baseDelay = 1000 // 1 second base delay
 
-            if (error) {
-                console.log('Error fetching profile:', error.message)
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .single()
 
-                // If profile fetch fails for ANY reason (not found, etc), try to create one
-                // This is safer for new users who might be missing a profile
-                console.log('Attempting to create new profile...')
+                if (error) {
+                    console.log(`Error fetching profile (attempt ${attempt + 1}/${maxRetries}):`, error.message)
 
-                // Get user metadata from auth
-                const { data: { user: authUser } } = await supabase.auth.getUser()
+                    // If profile fetch fails for ANY reason (not found, etc), try to create one
+                    // This is safer for new users who might be missing a profile
+                    console.log('Attempting to create new profile...')
 
-                if (authUser) {
-                    const metadata = authUser.user_metadata
-                    const newProfile = {
-                        id: userId,
-                        email: authUser.email,
-                        full_name: metadata?.full_name || 'New User',
-                        username: metadata?.username || `user_${userId.slice(0, 8)}`,
-                        phone_number: metadata?.phone_number || '',
-                        balance: 1000.00, // Starting balance
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
+                    // Get user metadata from auth
+                    const { data: { user: authUser } } = await supabase.auth.getUser()
+
+                    if (authUser) {
+                        const metadata = authUser.user_metadata
+                        const newProfile = {
+                            id: userId,
+                            email: authUser.email,
+                            full_name: metadata?.full_name || 'New User',
+                            username: metadata?.username || `user_${userId.slice(0, 8)}`,
+                            phone_number: metadata?.phone_number || '',
+                            balance: 1000.00, // Starting balance
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        }
+
+                        const { data: createdProfile, error: createError } = await supabase
+                            .from('profiles')
+                            .insert(newProfile)
+                            .select()
+                            .single()
+
+                        if (createError) {
+                            console.error('Error creating profile:', createError)
+                            // If creation fails (e.g. duplicate), return null
+                            return null
+                        }
+
+                        console.log('Profile created successfully')
+                        return createdProfile as Profile
                     }
 
-                    const { data: createdProfile, error: createError } = await supabase
-                        .from('profiles')
-                        .insert(newProfile)
-                        .select()
-                        .single()
-
-                    if (createError) {
-                        console.error('Error creating profile:', createError)
-                        // If creation fails (e.g. duplicate), return null
-                        return null
-                    }
-
-                    console.log('Profile created successfully')
-                    return createdProfile as Profile
+                    return null
                 }
-
-                return null
+                return data as Profile
+            } catch (err) {
+                console.error(`Profile fetch error (attempt ${attempt + 1}/${maxRetries}):`, err)
+                
+                // If not the last attempt, wait before retrying
+                if (attempt < maxRetries - 1) {
+                    const delay = baseDelay * Math.pow(2, attempt) // Exponential backoff
+                    console.log(`Retrying profile fetch in ${delay}ms...`)
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                }
             }
-            return data as Profile
-        } catch (err) {
-            console.error('Profile fetch error:', err)
-            return null
         }
+        
+        console.error('Profile fetch failed after all retries')
+        return null
     }
 
     const refreshProfile = async () => {
@@ -92,28 +107,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         let mounted = true
 
-        // Set a max timeout for loading state (3 seconds)
+        // Set a max timeout for loading state (8 seconds for mobile compatibility)
+        // Mobile networks can be slower, so we give more time for auth initialization
         const loadingTimeout = setTimeout(() => {
             if (mounted && loading) {
                 console.log('Auth loading timeout - setting loading to false')
                 setLoading(false)
             }
-        }, 3000)
+        }, 8000)
 
         // Get initial session
         const initializeAuth = async () => {
             try {
-                const { data: { session: currentSession } } = await supabase.auth.getSession()
+                console.log('Initializing auth...')
+                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
 
                 if (!mounted) return
 
+                if (sessionError) {
+                    console.error('Error getting session:', sessionError.message)
+                    if (mounted) setLoading(false)
+                    return
+                }
+
                 if (currentSession?.user) {
+                    console.log('Session found for user:', currentSession.user.email)
                     setSession(currentSession)
                     setUser(currentSession.user)
                     // Fetch profile in background, don't block
                     fetchProfile(currentSession.user.id).then(profileData => {
-                        if (mounted) setProfile(profileData)
+                        if (mounted) {
+                            setProfile(profileData)
+                            if (profileData) {
+                                console.log('Profile loaded successfully')
+                            } else {
+                                console.warn('Profile fetch returned null')
+                            }
+                        }
                     })
+                } else {
+                    console.log('No active session found')
                 }
 
                 // Always set loading to false after checking session
@@ -127,18 +160,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         initializeAuth()
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
             if (!mounted) return
 
+            console.log('Auth state changed:', event)
             setSession(newSession)
             setUser(newSession?.user ?? null)
 
             if (newSession?.user) {
+                console.log('User signed in:', newSession.user.email)
                 // Fetch profile in background
                 fetchProfile(newSession.user.id).then(profileData => {
-                    if (mounted) setProfile(profileData)
+                    if (mounted) {
+                        setProfile(profileData)
+                        if (profileData) {
+                            console.log('Profile loaded after auth change')
+                        } else {
+                            console.warn('Profile fetch returned null after auth change')
+                        }
+                    }
                 })
             } else {
+                console.log('User signed out')
                 setProfile(null)
             }
 

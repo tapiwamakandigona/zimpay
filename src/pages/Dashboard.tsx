@@ -26,12 +26,13 @@ export function Dashboard() {
     const [updateMessage, setUpdateMessage] = useState({ type: '', text: '' })
     const [isResetting, setIsResetting] = useState(false)
 
-    // Timeout for profile loading - if no profile after 5 seconds, show retry
+    // Timeout for profile loading - if no profile after 10 seconds, show retry
+    // Increased timeout for mobile compatibility
     useEffect(() => {
         if (!profile && user) {
             const timeout = setTimeout(() => {
                 setProfileTimeout(true)
-            }, 5000)
+            }, 10000)
             return () => clearTimeout(timeout)
         } else {
             setProfileTimeout(false)
@@ -53,43 +54,75 @@ export function Dashboard() {
 
         fetchTransactions()
 
-        // Subscribe to real-time updates
-        const subscription = supabase
-            .channel('transactions')
-            .on('postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'transactions' },
-                () => {
-                    fetchTransactions()
-                    refreshProfile()
-                }
-            )
-            .subscribe()
+        // Subscribe to real-time updates with error handling
+        // Mobile browsers can have unstable WebSocket connections
+        let subscription: any = null
+        try {
+            subscription = supabase
+                .channel('transactions')
+                .on('postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'transactions' },
+                    () => {
+                        console.log('Real-time transaction update received')
+                        fetchTransactions()
+                        refreshProfile()
+                    }
+                )
+                .subscribe((status: string) => {
+                    console.log('Real-time subscription status:', status)
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to real-time updates')
+                    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                        console.warn('Real-time subscription closed or errored')
+                    }
+                })
+        } catch (err) {
+            console.error('Error setting up real-time subscription:', err)
+            // Continue without real-time updates if subscription fails
+        }
 
         return () => {
-            subscription.unsubscribe()
+            if (subscription) {
+                try {
+                    subscription.unsubscribe()
+                } catch (err) {
+                    console.error('Error unsubscribing from real-time updates:', err)
+                }
+            }
         }
     }, [user, navigate])
 
     const fetchTransactions = async () => {
         if (!user) return
 
-        const { data, error } = await supabase
-            .from('transactions')
-            .select(`
-        *,
-        sender:profiles!transactions_sender_id_fkey(id, full_name, username),
-        receiver:profiles!transactions_receiver_id_fkey(id, full_name, username)
-      `)
-            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-            .order('created_at', { ascending: false })
-            .limit(20)
+        try {
+            const { data, error } = await supabase
+                .from('transactions')
+                .select(`
+            *,
+            sender:profiles!transactions_sender_id_fkey(id, full_name, username),
+            receiver:profiles!transactions_receiver_id_fkey(id, full_name, username)
+          `)
+                .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+                .order('created_at', { ascending: false })
+                .limit(20)
 
-        if (error) {
-            console.error('Error fetching transactions:', error)
-        } else {
-            setTransactions(data || [])
+            if (error) {
+                console.error('Error fetching transactions:', error.message, error.code)
+                // Don't fail the entire dashboard if transactions fail to load
+                // Just set empty transactions and continue
+                setTransactions([])
+            } else {
+                console.log(`Successfully fetched ${data?.length || 0} transactions`)
+                setTransactions(data || [])
+            }
+        } catch (err) {
+            console.error('Unexpected error fetching transactions:', err)
+            // Set empty transactions on unexpected errors
+            setTransactions([])
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     const handleSignOut = async () => {
@@ -163,14 +196,15 @@ export function Dashboard() {
         }
     }
 
-    // Timeout for initial loading - force loading to false after 5 seconds
+    // Timeout for initial loading - force loading to false after 10 seconds
+    // Increased timeout for mobile compatibility - slower networks need more time
     useEffect(() => {
         const timeout = setTimeout(() => {
             if (loading) {
                 console.log('Dashboard loading timeout - forcing loading to false')
                 setLoading(false)
             }
-        }, 5000)
+        }, 10000)
         return () => clearTimeout(timeout)
     }, [loading])
 
