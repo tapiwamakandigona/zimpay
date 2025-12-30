@@ -162,6 +162,20 @@ export function Dashboard() {
                     <div className="loading-logo">💳</div>
                     <div className="spinner"></div>
                     <p className="loading-text">Fetching your account...</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="btn btn-outline"
+                        style={{ marginTop: '1rem', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
+                    >
+                        Click to Retry
+                    </button>
+                    <button
+                        onClick={() => refreshProfile()}
+                        className="btn btn-primary"
+                        style={{ marginTop: '0.5rem' }}
+                    >
+                        Initialize Account
+                    </button>
                 </div>
             </div>
         )

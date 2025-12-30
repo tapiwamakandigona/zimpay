@@ -35,43 +35,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .single()
 
             if (error) {
-                // Profile doesn't exist - try to create it
-                if (error.code === 'PGRST116') {
-                    console.log('Profile not found, creating one...')
+                console.log('Error fetching profile:', error.message)
 
-                    // Get user metadata from auth
-                    const { data: { user: authUser } } = await supabase.auth.getUser()
+                // If profile fetch fails for ANY reason (not found, etc), try to create one
+                // This is safer for new users who might be missing a profile
+                console.log('Attempting to create new profile...')
 
-                    if (authUser) {
-                        const metadata = authUser.user_metadata
-                        const newProfile = {
-                            id: userId,
-                            email: authUser.email,
-                            full_name: metadata?.full_name || 'New User',
-                            username: metadata?.username || `user_${userId.slice(0, 8)}`,
-                            phone_number: metadata?.phone_number || '',
-                            balance: 1000.00, // Starting balance
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        }
+                // Get user metadata from auth
+                const { data: { user: authUser } } = await supabase.auth.getUser()
 
-                        const { data: createdProfile, error: createError } = await supabase
-                            .from('profiles')
-                            .insert(newProfile)
-                            .select()
-                            .single()
-
-                        if (createError) {
-                            console.error('Error creating profile:', createError)
-                            return null
-                        }
-
-                        console.log('Profile created successfully')
-                        return createdProfile as Profile
+                if (authUser) {
+                    const metadata = authUser.user_metadata
+                    const newProfile = {
+                        id: userId,
+                        email: authUser.email,
+                        full_name: metadata?.full_name || 'New User',
+                        username: metadata?.username || `user_${userId.slice(0, 8)}`,
+                        phone_number: metadata?.phone_number || '',
+                        balance: 1000.00, // Starting balance
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
                     }
+
+                    const { data: createdProfile, error: createError } = await supabase
+                        .from('profiles')
+                        .insert(newProfile)
+                        .select()
+                        .single()
+
+                    if (createError) {
+                        console.error('Error creating profile:', createError)
+                        // If creation fails (e.g. duplicate), return null
+                        return null
+                    }
+
+                    console.log('Profile created successfully')
+                    return createdProfile as Profile
                 }
 
-                console.error('Error fetching profile:', error)
                 return null
             }
             return data as Profile
