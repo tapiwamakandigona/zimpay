@@ -25,6 +25,9 @@ export function Dashboard() {
     const [editPhone, setEditPhone] = useState('')
     const [updateMessage, setUpdateMessage] = useState({ type: '', text: '' })
     const [isResetting, setIsResetting] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
     // Timeout for profile loading - if no profile after 10 seconds, show retry
     // Increased timeout for mobile compatibility
@@ -196,6 +199,35 @@ export function Dashboard() {
                 setUpdateMessage({ type: 'success', text: 'Password reset email sent to ' + profile.email })
             }
             setIsResetting(false)
+        }
+    }
+
+    const handleDeleteAccount = async () => {
+        if (deleteConfirmText !== 'DELETE') {
+            setUpdateMessage({ type: 'error', text: 'Please type DELETE to confirm' })
+            return
+        }
+
+        setIsDeleting(true)
+        setUpdateMessage({ type: '', text: '' })
+
+        try {
+            const { error } = await supabase.rpc('delete_user_account')
+
+            if (error) {
+                console.error('Delete account error:', error)
+                setUpdateMessage({ type: 'error', text: error.message || 'Failed to delete account' })
+                setIsDeleting(false)
+                return
+            }
+
+            // Account deleted successfully - sign out and redirect
+            await signOut()
+            navigate('/login')
+        } catch (err) {
+            console.error('Unexpected delete error:', err)
+            setUpdateMessage({ type: 'error', text: 'An unexpected error occurred' })
+            setIsDeleting(false)
         }
     }
 
@@ -546,7 +578,19 @@ export function Dashboard() {
                                     {isResetting ? 'Sending...' : '🔒 Reset Password'}
                                 </button>
                                 <button className="btn btn-danger btn-block" onClick={handleSignOut}>
-                                    Sign Out
+                                    🚪 Sign Out
+                                </button>
+                                <button
+                                    className="btn btn-block"
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    style={{
+                                        background: 'transparent',
+                                        border: '1px solid var(--danger)',
+                                        color: 'var(--danger)',
+                                        marginTop: '12px'
+                                    }}
+                                >
+                                    🗑️ Delete Account
                                 </button>
                             </div>
                         )}
@@ -572,6 +616,65 @@ export function Dashboard() {
                         refreshProfile()
                     }}
                 />
+            )}
+
+            {/* Delete Account Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="modal-overlay" onClick={() => !isDeleting && setShowDeleteConfirm(false)}>
+                    <div className="modal-content glass-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <h2 style={{ color: 'var(--danger)', marginBottom: '16px' }}>⚠️ Delete Account</h2>
+                        <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+                            This action is <strong>permanent and cannot be undone</strong>. Your profile will be deleted,
+                            but your transaction history will be preserved (with your name removed).
+                        </p>
+                        <p style={{ marginBottom: '8px', fontSize: '0.9rem' }}>
+                            Type <strong style={{ color: 'var(--danger)' }}>DELETE</strong> to confirm:
+                        </p>
+                        <input
+                            type="text"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
+                            placeholder="Type DELETE"
+                            disabled={isDeleting}
+                            style={{
+                                width: '100%',
+                                padding: '12px',
+                                borderRadius: '8px',
+                                border: deleteConfirmText === 'DELETE'
+                                    ? '2px solid var(--danger)'
+                                    : '1px solid var(--border-color)',
+                                background: 'var(--bg-tertiary)',
+                                color: 'var(--text-primary)',
+                                marginBottom: '16px',
+                                textAlign: 'center',
+                                fontWeight: 'bold',
+                                letterSpacing: '2px'
+                            }}
+                        />
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setShowDeleteConfirm(false)
+                                    setDeleteConfirmText('')
+                                    setUpdateMessage({ type: '', text: '' })
+                                }}
+                                disabled={isDeleting}
+                                style={{ flex: 1 }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-danger"
+                                onClick={handleDeleteAccount}
+                                disabled={isDeleting || deleteConfirmText !== 'DELETE'}
+                                style={{ flex: 1, opacity: deleteConfirmText !== 'DELETE' ? 0.5 : 1 }}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete Forever'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     )
