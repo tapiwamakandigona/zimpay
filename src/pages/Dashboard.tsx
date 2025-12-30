@@ -163,6 +163,17 @@ export function Dashboard() {
         }
     }
 
+    // Timeout for initial loading - force loading to false after 5 seconds
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            if (loading) {
+                console.log('Dashboard loading timeout - forcing loading to false')
+                setLoading(false)
+            }
+        }, 5000)
+        return () => clearTimeout(timeout)
+    }, [loading])
+
     if (loading) {
         return (
             <div className="loading-screen">
