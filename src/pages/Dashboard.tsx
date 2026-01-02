@@ -339,6 +339,15 @@ export function Dashboard() {
                                 <span className="action-icon">👤</span>
                                 <span>Profile</span>
                             </button>
+                            <a
+                                href="https://tapiwamakandigona.github.io/zimbet/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="action-btn zimbet"
+                            >
+                                <span className="action-icon">🎰</span>
+                                <span>ZimBet</span>
+                            </a>
                         </section>
 
                         {/* Recent Transactions */}

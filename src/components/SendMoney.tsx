@@ -20,61 +20,204 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [recipientProfile, setRecipientProfile] = useState<Profile | null>(null)
+    const [isZimBetRecipient, setIsZimBetRecipient] = useState(false)
 
     const handleSearch = async () => {
-        if (!recipient.trim()) {
-            setError('Please enter a username or phone number')
+        // ========== INPUT VALIDATION ==========
+        const rawInput = recipient.trim()
+
+        if (!rawInput) {
+            setError('Please enter a username, email, or phone number')
+            return
+        }
+
+        // Check minimum length
+        if (rawInput.length < 2) {
+            setError('Please enter at least 2 characters')
             return
         }
 
         setLoading(true)
         setError('')
+        setRecipientProfile(null)
+        setIsZimBetRecipient(false)
 
-        const searchTerm = recipient.trim()
+        // ========== INPUT CLASSIFICATION ==========
+        // Remove @ prefix for processing
+        const searchTerm = rawInput.replace(/^@+/, '').trim()
 
-        // Check if it looks like a phone number (contains mostly digits)
-        const isPhoneNumber = /^[\d\s+\-()]+$/.test(searchTerm) && searchTerm.replace(/\D/g, '').length >= 9
+        // Check if user is sending to a ZimBet username (zm-*)
+        const isZimBetUsername = searchTerm.toLowerCase().startsWith('zm-')
 
-        let data = null
-        let searchError = null
+        if (isZimBetUsername) {
+            // Search in zimbet_accounts table
+            try {
+                const { data: zimbetAccount, error: zimbetError } = await supabase
+                    .from('zimbet_accounts')
+                    .select('id, user_id, username, balance')
+                    .eq('username', searchTerm.toLowerCase())
+                    .single()
 
-        if (isPhoneNumber) {
-            // Generate all possible phone formats
-            const phoneFormats = getAllPhoneFormats(searchTerm)
+                if (zimbetError || !zimbetAccount) {
+                    setError(`ZimBet account "@${searchTerm}" not found. Check the username.`)
+                    setLoading(false)
+                    return
+                }
 
-            // Search for any matching phone format
-            const result = await supabase
-                .from('profiles')
-                .select('*')
-                .in('phone_number', phoneFormats)
-                .limit(1)
-                .maybeSingle()
-
-            data = result.data
-            searchError = result.error
-        } else {
-            // Search by username (remove @ if present)
-            const username = searchTerm.replace(/^@/, '').toLowerCase()
-
-            const result = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('username', username)
-                .maybeSingle()
-
-            data = result.data
-            searchError = result.error
+                // Create a Profile-like object for the UI
+                setRecipientProfile({
+                    id: zimbetAccount.user_id,
+                    email: '',
+                    full_name: 'ZimBet Account',
+                    username: zimbetAccount.username,
+                    phone_number: '',
+                    balance: zimbetAccount.balance,
+                    created_at: '',
+                    updated_at: ''
+                })
+                setIsZimBetRecipient(true)
+                setError('')
+                setLoading(false)
+                return
+            } catch {
+                setError('Error looking up ZimBet account. Try again.')
+                setLoading(false)
+                return
+            }
         }
 
-        if (searchError || !data) {
-            setError('Recipient not found. Check the username or phone number.')
+        // Detect input type
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchTerm)
+        const isPhoneNumber = /^[\d\s+\-()]+$/.test(searchTerm) && searchTerm.replace(/\D/g, '').length >= 9
+        const isUsername = !isEmail && !isPhoneNumber
+
+        // Validate username format if it's a username
+        if (isUsername) {
+            // Remove any remaining special chars except underscore
+            const cleanUsername = searchTerm.toLowerCase().replace(/[^a-z0-9_]/g, '')
+            if (cleanUsername.length < 2) {
+                setError('Username must be at least 2 characters (letters, numbers, underscore only)')
+                setLoading(false)
+                return
+            }
+            if (cleanUsername !== searchTerm.toLowerCase()) {
+                // Has special characters - warn user
+                setError(`Invalid characters in username. Did you mean "@${cleanUsername}"?`)
+                setLoading(false)
+                return
+            }
+        }
+
+        // ========== SEARCH WITH TIMEOUT ==========
+        const TIMEOUT_MS = 10000
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS)
+        })
+
+        try {
+            let data = null
+            let searchMethod = ''
+
+            if (isEmail) {
+                // ===== SEARCH BY EMAIL =====
+                searchMethod = 'email'
+                const result = await Promise.race([
+                    supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('email', searchTerm.toLowerCase())
+                        .maybeSingle(),
+                    timeoutPromise
+                ])
+                data = result.data
+                if (result.error) throw new Error('DB_ERROR')
+
+            } else if (isPhoneNumber) {
+                // ===== SEARCH BY PHONE =====
+                searchMethod = 'phone'
+                const phoneFormats = getAllPhoneFormats(searchTerm)
+
+                const result = await Promise.race([
+                    supabase
+                        .from('profiles')
+                        .select('*')
+                        .in('phone_number', phoneFormats)
+                        .limit(1)
+                        .maybeSingle(),
+                    timeoutPromise
+                ])
+                data = result.data
+                if (result.error) throw new Error('DB_ERROR')
+
+            } else {
+                // ===== SEARCH BY USERNAME =====
+                searchMethod = 'username'
+                const username = searchTerm.toLowerCase()
+
+                // Try exact match first
+                const result = await Promise.race([
+                    supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('username', username)
+                        .maybeSingle(),
+                    timeoutPromise
+                ])
+                data = result.data
+                if (result.error) throw new Error('DB_ERROR')
+
+                // If no exact match, try case-insensitive partial match as hint
+                if (!data) {
+                    const partialResult = await Promise.race([
+                        supabase
+                            .from('profiles')
+                            .select('username')
+                            .ilike('username', `%${username}%`)
+                            .limit(3),
+                        timeoutPromise
+                    ])
+
+                    if (partialResult.data && partialResult.data.length > 0) {
+                        const suggestions = partialResult.data.map(p => `@${p.username}`).join(', ')
+                        setError(`User "@${username}" not found. Did you mean: ${suggestions}?`)
+                        setLoading(false)
+                        return
+                    }
+                }
+            }
+
+            // ========== RESULT HANDLING ==========
+            if (!data) {
+                // Specific error messages based on search type
+                if (searchMethod === 'email') {
+                    setError('No account found with this email address.')
+                } else if (searchMethod === 'phone') {
+                    setError('No account found with this phone number. Try different format (e.g., 0773123456).')
+                } else {
+                    setError(`User "@${searchTerm}" not found. Check the spelling.`)
+                }
+                setRecipientProfile(null)
+            } else if (data.id === user?.id) {
+                setError('You cannot send money to yourself')
+                setRecipientProfile(null)
+            } else {
+                setRecipientProfile(data as Profile)
+                setError('')
+            }
+        } catch (err) {
+            // ========== ERROR HANDLING ==========
+            if (err instanceof Error) {
+                if (err.message === 'TIMEOUT') {
+                    setError('Search timed out. Please check your connection and try again.')
+                } else if (err.message === 'DB_ERROR') {
+                    setError('Database error. Please try again later.')
+                } else {
+                    setError('Something went wrong. Please try again.')
+                }
+            } else {
+                setError('Unexpected error. Please try again.')
+            }
             setRecipientProfile(null)
-        } else if (data.id === user?.id) {
-            setError('You cannot send money to yourself')
-            setRecipientProfile(null)
-        } else {
-            setRecipientProfile(data as Profile)
-            setError('')
         }
 
         setLoading(false)
@@ -108,16 +251,72 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
     }
 
     const handleConfirm = async () => {
-        if (!user || !recipientProfile) return
+        if (!user || !recipientProfile || !profile) return
 
         setLoading(true)
         setError('')
 
+        const transferAmount = Math.floor(parseFloat(amount))
+
+        // Handle ZimBet recipient differently
+        if (isZimBetRecipient) {
+            try {
+                // 1. Deduct from sender's ZimPay balance
+                const { error: deductError } = await supabase
+                    .from('profiles')
+                    .update({ balance: Math.floor(profile.balance - transferAmount) })
+                    .eq('id', user.id)
+
+                if (deductError) {
+                    setError('Failed to process transfer. Try again.')
+                    setLoading(false)
+                    return
+                }
+
+                // 2. Add to ZimBet account balance
+                const { error: addError } = await supabase
+                    .from('zimbet_accounts')
+                    .update({ balance: Math.floor(recipientProfile.balance + transferAmount) })
+                    .eq('username', recipientProfile.username)
+
+                if (addError) {
+                    // Rollback
+                    await supabase
+                        .from('profiles')
+                        .update({ balance: profile.balance })
+                        .eq('id', user.id)
+                    setError('Transfer failed. Balance restored.')
+                    setLoading(false)
+                    return
+                }
+
+                // 3. Record transaction
+                await supabase
+                    .from('transactions')
+                    .insert({
+                        sender_id: user.id,
+                        receiver_id: recipientProfile.id,
+                        amount: transferAmount,
+                        description: description || `Transfer to ZimBet @${recipientProfile.username}`,
+                        status: 'completed'
+                    })
+
+                setStep('success')
+                setLoading(false)
+                return
+            } catch {
+                setError('Something went wrong. Try again.')
+                setLoading(false)
+                return
+            }
+        }
+
+        // Regular ZimPay to ZimPay transfer
         const { data, error: transferError } = await supabase
             .rpc('transfer_money', {
                 p_sender_id: user.id,
                 p_receiver_identifier: recipientProfile.username,
-                p_amount: parseFloat(amount),
+                p_amount: transferAmount,
                 p_description: description || null
             })
 

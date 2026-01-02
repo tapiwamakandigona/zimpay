@@ -273,7 +273,7 @@
 ========================================== */
 .quick-actions {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 14px;
     margin-bottom: 28px;
 }
@@ -355,6 +355,27 @@
 .action-btn.secondary:active {
     transform: translateY(-2px);
     box-shadow: var(--neu-inset-light), var(--neu-inset-dark);
+}
+
+/* ZimBet Button - Gold Gaming Theme */
+.action-btn.zimbet {
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+    color: #1a1a2e;
+    text-decoration: none;
+    box-shadow:
+        0 8px 24px -8px rgba(255, 140, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.action-btn.zimbet:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow:
+        0 16px 40px -12px rgba(255, 140, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.action-btn.zimbet:active {
+    transform: translateY(-2px) scale(0.98);
 }
 
 .action-icon {
