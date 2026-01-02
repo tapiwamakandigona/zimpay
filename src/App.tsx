@@ -50,8 +50,8 @@ function useAuthCallback() {
             // Clean the URL by removing the hash params
             window.history.replaceState(null, '', window.location.pathname)
           }
-        } catch (error) {
-          console.error('Auth callback error:', error)
+        } catch {
+          // Silent fail on auth callback errors
         }
       }
 

@@ -3,84 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
+import { AsYouType } from 'libphonenumber-js'
+import { normalizePhoneNumber, getAllPhoneFormats, isValidPhone } from '../lib/phoneUtils'
+import { COUNTRIES, type CountryCode, getFlagUrl } from '../lib/countries'
 import './Auth.css'
-
-// Country codes for phone normalization
-const COUNTRY_CODES: { [key: string]: string } = {
-    '263': 'ZW', // Zimbabwe
-    '27': 'ZA',  // South Africa
-    '254': 'KE', // Kenya
-    '234': 'NG', // Nigeria
-    '44': 'UK',  // United Kingdom
-    '1': 'US',   // USA/Canada
-    '91': 'IN',  // India
-    '61': 'AU',  // Australia
-}
-
-// Normalize phone number to a standard format for comparison
-const normalizePhone = (phone: string): string[] => {
-    // Remove all non-digit characters except leading +
-    let cleaned = phone.replace(/[^\d+]/g, '')
-
-    // If starts with +, remove it and keep the rest
-    if (cleaned.startsWith('+')) {
-        cleaned = cleaned.substring(1)
-    }
-
-    // If starts with 00 (international prefix), remove it
-    if (cleaned.startsWith('00')) {
-        cleaned = cleaned.substring(2)
-    }
-
-    // Generate all possible formats to check
-    const formats: string[] = []
-
-    // If starts with 0 (local format), generate international variants
-    if (cleaned.startsWith('0')) {
-        const localNumber = cleaned.substring(1) // Remove leading 0
-
-        // Add common country code variants
-        formats.push(`263${localNumber}`)  // Zimbabwe
-        formats.push(`27${localNumber}`)   // South Africa
-        formats.push(`254${localNumber}`)  // Kenya
-        formats.push(`234${localNumber}`)  // Nigeria
-        formats.push(`44${localNumber}`)   // UK
-        formats.push(`1${localNumber}`)    // US
-        formats.push(`91${localNumber}`)   // India
-        formats.push(cleaned)              // Original with 0
-        formats.push(localNumber)          // Without leading 0
-    } else {
-        // Already international format
-        formats.push(cleaned)
-
-        // Also check with leading 0 (local format)
-        // Try to detect country code and add local variant
-        for (const code of Object.keys(COUNTRY_CODES)) {
-            if (cleaned.startsWith(code)) {
-                const localPart = cleaned.substring(code.length)
-                formats.push(`0${localPart}`)
-                break
-            }
-        }
-    }
-
-    // Also add + prefixed versions
-    const withPlus = formats.map(f => `+${f}`)
-
-    return [...new Set([...formats, ...withPlus])] // Remove duplicates
-}
-
-// Get the preferred storage format (international with country code)
-const getStorageFormat = (phone: string): string => {
-    let cleaned = phone.replace(/[^\d]/g, '')
-
-    // If starts with 0, default to Zimbabwe (+263)
-    if (cleaned.startsWith('0')) {
-        cleaned = '263' + cleaned.substring(1)
-    }
-
-    return cleaned
-}
 
 type ValidationStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
 
@@ -93,6 +19,8 @@ export function SignUp() {
         username: '',
         phoneNumber: ''
     })
+    const [selectedCountry, setSelectedCountry] = useState<CountryCode>('ZW')
+    const [showCountryDropdown, setShowCountryDropdown] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
@@ -105,6 +33,8 @@ export function SignUp() {
     const { signUp } = useAuth()
     const { theme, toggleTheme } = useTheme()
     const navigate = useNavigate()
+
+    const currentCountry = COUNTRIES.find(c => c.code === selectedCountry) || COUNTRIES[0]
 
     // Debounced username check
     useEffect(() => {
@@ -135,15 +65,20 @@ export function SignUp() {
     // Debounced phone check
     useEffect(() => {
         const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
-        if (cleanPhone.length < 10) {
+        if (!cleanPhone) {
             setPhoneStatus('idle')
+            return
+        }
+
+        if (!isValidPhone(cleanPhone)) {
+            setPhoneStatus('invalid')
             return
         }
 
         setPhoneStatus('checking')
         const timer = setTimeout(async () => {
             // Get all possible phone formats to check
-            const phoneFormats = normalizePhone(cleanPhone)
+            const phoneFormats = getAllPhoneFormats(cleanPhone)
 
             // Check if any format exists in the database
             const { data } = await supabase
@@ -195,6 +130,25 @@ export function SignUp() {
         }
     }, [])
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value
+
+        // Use AsYouType formatter with selected country
+        const formatted = new AsYouType(selectedCountry).input(raw)
+
+        setFormData(prev => ({
+            ...prev,
+            phoneNumber: formatted
+        }))
+    }
+
+    const handleCountrySelect = (code: CountryCode) => {
+        setSelectedCountry(code)
+        setShowCountryDropdown(false)
+        // Clear phone number when country changes
+        setFormData(prev => ({ ...prev, phoneNumber: '' }))
+    }
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData(prev => ({
             ...prev,
@@ -227,8 +181,9 @@ export function SignUp() {
             return
         }
 
-        if (!/^\+?[\d\s-]{10,}$/.test(formData.phoneNumber)) {
-            setError('Please enter a valid phone number (10+ digits)')
+        const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
+        if (!isValidPhone(cleanPhone)) {
+            setError('Please enter a valid phone number')
             return
         }
 
@@ -248,8 +203,7 @@ export function SignUp() {
         }
 
         // Check for duplicate phone number (check all normalized formats)
-        const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
-        const phoneFormats = normalizePhone(cleanPhone)
+        const phoneFormats = getAllPhoneFormats(cleanPhone)
         const { data: existingPhone } = await supabase
             .from('profiles')
             .select('phone_number')
@@ -263,7 +217,7 @@ export function SignUp() {
         }
 
         // Store phone in normalized international format
-        const normalizedPhone = getStorageFormat(cleanPhone)
+        const normalizedPhone = normalizePhoneNumber(cleanPhone)
 
         const { error } = await signUp(formData.email, formData.password, {
             full_name: formData.fullName,
@@ -351,18 +305,65 @@ export function SignUp() {
 
                     <div className="form-group">
                         <label htmlFor="phoneNumber">Phone Number {renderValidationIcon(phoneStatus)}</label>
-                        <input
-                            type="tel"
-                            id="phoneNumber"
-                            name="phoneNumber"
-                            value={formData.phoneNumber}
-                            onChange={handleChange}
-                            placeholder="+263 77 123 4567"
-                            required
-                            autoComplete="tel"
-                            className={phoneStatus === 'taken' ? 'input-error' : phoneStatus === 'available' ? 'input-success' : ''}
-                        />
+                        <div className="phone-input-wrapper">
+                            {/* Custom Country Selector with Flag Images */}
+                            <div className="country-selector">
+                                <button
+                                    type="button"
+                                    className="country-trigger"
+                                    onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                                    aria-expanded={showCountryDropdown}
+                                    aria-haspopup="listbox"
+                                >
+                                    <img
+                                        src={getFlagUrl(selectedCountry, 40)}
+                                        alt={`${currentCountry.name} flag`}
+                                        className="flag-img"
+                                        loading="lazy"
+                                    />
+                                    <span className="dial-code">{currentCountry.dial}</span>
+                                    <span className="dropdown-arrow">▼</span>
+                                </button>
+
+                                {showCountryDropdown && (
+                                    <ul className="country-dropdown" role="listbox">
+                                        {COUNTRIES.map(country => (
+                                            <li
+                                                key={country.code}
+                                                role="option"
+                                                aria-selected={country.code === selectedCountry}
+                                                className={`country-option ${country.code === selectedCountry ? 'selected' : ''}`}
+                                                onClick={() => handleCountrySelect(country.code)}
+                                            >
+                                                <img
+                                                    src={getFlagUrl(country.code, 40)}
+                                                    alt={`${country.name} flag`}
+                                                    className="flag-img"
+                                                    loading="lazy"
+                                                />
+                                                <span className="country-name">{country.name}</span>
+                                                <span className="country-dial">{country.dial}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+
+                            <input
+                                type="tel"
+                                id="phoneNumber"
+                                name="phoneNumber"
+                                value={formData.phoneNumber}
+                                onChange={handlePhoneChange}
+                                placeholder={`${currentCountry.dial.slice(1)} 77 123 4567`}
+                                required
+                                autoComplete="tel"
+                                className={phoneStatus === 'taken' ? 'input-error' : phoneStatus === 'available' ? 'input-success' : ''}
+                                onFocus={() => setShowCountryDropdown(false)}
+                            />
+                        </div>
                         {phoneStatus === 'taken' && <small className="field-error">Phone number already registered</small>}
+                        {phoneStatus === 'invalid' && <small className="field-error">Please enter a valid phone number</small>}
                     </div>
 
                     <div className="form-row">

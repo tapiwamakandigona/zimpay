@@ -32,11 +32,8 @@ export function Dashboard() {
     // Timeout for profile loading - if no profile after 10 seconds, show retry
     // Increased timeout for mobile compatibility
     useEffect(() => {
-        console.log('📊 [DASHBOARD] Profile state check - profile:', profile, 'user:', user)
         if (!profile && user) {
-            console.log('📊 [DASHBOARD] No profile found, starting 10s timeout...')
             const timeout = setTimeout(() => {
-                console.log('📊 [DASHBOARD] Profile timeout reached - showing retry UI')
                 setProfileTimeout(true)
             }, 10000)
             return () => clearTimeout(timeout)
@@ -60,30 +57,19 @@ export function Dashboard() {
 
         fetchTransactions()
 
-        // Subscribe to real-time updates with error handling
-        // Mobile browsers can have unstable WebSocket connections
-        let subscription: any = null
+        let subscription: ReturnType<typeof supabase.channel> | null = null
         try {
             subscription = supabase
                 .channel('transactions')
                 .on('postgres_changes',
                     { event: 'INSERT', schema: 'public', table: 'transactions' },
                     () => {
-                        console.log('Real-time transaction update received')
                         fetchTransactions()
                         refreshProfile()
                     }
                 )
-                .subscribe((status: string) => {
-                    console.log('Real-time subscription status:', status)
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Successfully subscribed to real-time updates')
-                    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                        console.warn('Real-time subscription closed or errored')
-                    }
-                })
-        } catch (err) {
-            console.error('Error setting up real-time subscription:', err)
+                .subscribe()
+        } catch {
             // Continue without real-time updates if subscription fails
         }
 
@@ -91,8 +77,8 @@ export function Dashboard() {
             if (subscription) {
                 try {
                     subscription.unsubscribe()
-                } catch (err) {
-                    console.error('Error unsubscribing from real-time updates:', err)
+                } catch {
+                    // Silent fail on unsubscribe errors
                 }
             }
         }
@@ -114,16 +100,12 @@ export function Dashboard() {
                 .limit(20)
 
             if (error) {
-                console.error('Error fetching transactions:', error.message, error.code)
                 // Don't fail the entire dashboard if transactions fail to load
-                // Just set empty transactions and continue
                 setTransactions([])
             } else {
-                console.log(`Successfully fetched ${data?.length || 0} transactions`)
                 setTransactions(data || [])
             }
-        } catch (err) {
-            console.error('Unexpected error fetching transactions:', err)
+        } catch {
             // Set empty transactions on unexpected errors
             setTransactions([])
         } finally {
@@ -215,7 +197,6 @@ export function Dashboard() {
             const { error } = await supabase.rpc('delete_user_account')
 
             if (error) {
-                console.error('Delete account error:', error)
                 setUpdateMessage({ type: 'error', text: error.message || 'Failed to delete account' })
                 setIsDeleting(false)
                 return
@@ -224,8 +205,7 @@ export function Dashboard() {
             // Account deleted successfully - sign out and redirect
             await signOut()
             navigate('/login')
-        } catch (err) {
-            console.error('Unexpected delete error:', err)
+        } catch {
             setUpdateMessage({ type: 'error', text: 'An unexpected error occurred' })
             setIsDeleting(false)
         }
@@ -236,7 +216,6 @@ export function Dashboard() {
     useEffect(() => {
         const timeout = setTimeout(() => {
             if (loading) {
-                console.log('Dashboard loading timeout - forcing loading to false')
                 setLoading(false)
             }
         }, 10000)

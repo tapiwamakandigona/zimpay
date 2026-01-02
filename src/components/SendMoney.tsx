@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getAllPhoneFormats } from '../lib/phoneUtils'
 import type { Profile } from '../lib/supabase'
 import './SendMoney.css'
 
@@ -29,11 +30,41 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         setLoading(true)
         setError('')
 
-        const { data, error: searchError } = await supabase
-            .from('profiles')
-            .select('*')
-            .or(`username.eq.${recipient.toLowerCase()},phone_number.eq.${recipient}`)
-            .single()
+        const searchTerm = recipient.trim()
+
+        // Check if it looks like a phone number (contains mostly digits)
+        const isPhoneNumber = /^[\d\s+\-()]+$/.test(searchTerm) && searchTerm.replace(/\D/g, '').length >= 9
+
+        let data = null
+        let searchError = null
+
+        if (isPhoneNumber) {
+            // Generate all possible phone formats
+            const phoneFormats = getAllPhoneFormats(searchTerm)
+
+            // Search for any matching phone format
+            const result = await supabase
+                .from('profiles')
+                .select('*')
+                .in('phone_number', phoneFormats)
+                .limit(1)
+                .maybeSingle()
+
+            data = result.data
+            searchError = result.error
+        } else {
+            // Search by username (remove @ if present)
+            const username = searchTerm.replace(/^@/, '').toLowerCase()
+
+            const result = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('username', username)
+                .maybeSingle()
+
+            data = result.data
+            searchError = result.error
+        }
 
         if (searchError || !data) {
             setError('Recipient not found. Check the username or phone number.')
@@ -115,10 +146,25 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         }).format(num)
     }
 
+    const handleClose = (e?: React.MouseEvent) => {
+        if (e) {
+            e.preventDefault()
+            e.stopPropagation()
+        }
+        onClose()
+    }
+
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={handleClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <button className="modal-close" onClick={onClose}>✕</button>
+                <button
+                    className="modal-close"
+                    onClick={handleClose}
+                    type="button"
+                    aria-label="Close modal"
+                >
+                    ✕
+                </button>
 
                 {step === 'form' && (
                     <>
@@ -141,7 +187,7 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                                             setRecipient(e.target.value)
                                             setRecipientProfile(null)
                                         }}
-                                        placeholder="@username or +263..."
+                                        placeholder="@username or 0773..."
                                     />
                                     <button
                                         type="button"

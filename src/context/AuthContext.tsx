@@ -27,60 +27,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true)
 
     const fetchProfile = async (userId: string): Promise<Profile | null> => {
-        console.log('🔍 [PROFILE FETCH] Starting fetch for userId:', userId)
-        console.log('🔍 [PROFILE FETCH] User agent:', navigator.userAgent)
-        console.log('🔍 [PROFILE FETCH] Is mobile:', /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
-        
         // Retry logic with exponential backoff for mobile networks
         const maxRetries = 3
-        const baseDelay = 1000 // 1 second base delay
+        const baseDelay = 1000
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            console.log(`🔍 [PROFILE FETCH] Attempt ${attempt + 1}/${maxRetries}`)
-            
             try {
-                console.log('🔍 [PROFILE FETCH] Querying profiles table...')
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', userId)
                     .single()
 
-                console.log('🔍 [PROFILE FETCH] Query result - data:', data, 'error:', error)
-
                 if (error) {
-                    console.log(`🔍 [PROFILE FETCH] Error fetching profile (attempt ${attempt + 1}/${maxRetries}):`, error.message, error.code, error.hint)
-
-                    // If profile fetch fails for ANY reason (not found, etc), try to create one
-                    // This is safer for new users who might be missing a profile
-                    console.log('🔍 [PROFILE FETCH] Attempting to create new profile...')
-
-                    // Get user metadata from auth
-                    console.log('🔍 [PROFILE FETCH] Getting user from auth...')
-                    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-
-                    if (authError) {
-                        console.error('🔍 [PROFILE FETCH] Error getting auth user:', authError)
-                    }
-                    
-                    console.log('🔍 [PROFILE FETCH] Auth user:', authUser)
+                    // If profile fetch fails, try to create one for new users
+                    const { data: { user: authUser } } = await supabase.auth.getUser()
 
                     if (authUser) {
                         const metadata = authUser.user_metadata
-                        console.log('🔍 [PROFILE FETCH] User metadata:', metadata)
-                        
+
                         const newProfile = {
                             id: userId,
                             email: authUser.email,
                             full_name: metadata?.full_name || 'New User',
                             username: metadata?.username || `user_${userId.slice(0, 8)}`,
                             phone_number: metadata?.phone_number || '',
-                            balance: 1000.00, // Starting balance
+                            balance: 1000.00,
                             created_at: new Date().toISOString(),
                             updated_at: new Date().toISOString()
                         }
-
-                        console.log('🔍 [PROFILE FETCH] Creating profile:', newProfile)
 
                         const { data: createdProfile, error: createError } = await supabase
                             .from('profiles')
@@ -88,36 +63,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             .select()
                             .single()
 
-                        console.log('🔍 [PROFILE FETCH] Create result - data:', createdProfile, 'error:', createError)
-
                         if (createError) {
-                            console.error('🔍 [PROFILE FETCH] Error creating profile:', createError.message, createError.code, createError.hint)
-                            // If creation fails (e.g. duplicate), return null
                             return null
                         }
 
-                        console.log('🔍 [PROFILE FETCH] Profile created successfully')
                         return createdProfile as Profile
                     }
 
                     return null
                 }
-                
-                console.log('🔍 [PROFILE FETCH] Profile fetched successfully:', data)
+
                 return data as Profile
-            } catch (err) {
-                console.error(`🔍 [PROFILE FETCH] Unexpected error (attempt ${attempt + 1}/${maxRetries}):`, err)
-                
+            } catch {
                 // If not the last attempt, wait before retrying
                 if (attempt < maxRetries - 1) {
-                    const delay = baseDelay * Math.pow(2, attempt) // Exponential backoff
-                    console.log(`🔍 [PROFILE FETCH] Retrying in ${delay}ms...`)
+                    const delay = baseDelay * Math.pow(2, attempt)
                     await new Promise(resolve => setTimeout(resolve, delay))
                 }
             }
         }
-        
-        console.error('🔍 [PROFILE FETCH] Failed after all retries')
+
         return null
     }
 
@@ -132,10 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let mounted = true
 
         // Set a max timeout for loading state (8 seconds for mobile compatibility)
-        // Mobile networks can be slower, so we give more time for auth initialization
         const loadingTimeout = setTimeout(() => {
             if (mounted && loading) {
-                console.log('Auth loading timeout - setting loading to false')
                 setLoading(false)
             }
         }, 8000)
@@ -143,40 +106,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Get initial session
         const initializeAuth = async () => {
             try {
-                console.log('Initializing auth...')
                 const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
 
                 if (!mounted) return
 
                 if (sessionError) {
-                    console.error('Error getting session:', sessionError.message)
                     if (mounted) setLoading(false)
                     return
                 }
 
                 if (currentSession?.user) {
-                    console.log('Session found for user:', currentSession.user.email)
                     setSession(currentSession)
                     setUser(currentSession.user)
                     // Fetch profile in background, don't block
                     fetchProfile(currentSession.user.id).then(profileData => {
                         if (mounted) {
                             setProfile(profileData)
-                            if (profileData) {
-                                console.log('Profile loaded successfully')
-                            } else {
-                                console.warn('Profile fetch returned null')
-                            }
                         }
                     })
-                } else {
-                    console.log('No active session found')
                 }
 
                 // Always set loading to false after checking session
                 if (mounted) setLoading(false)
-            } catch (error) {
-                console.error('Auth initialization error:', error)
+            } catch {
                 if (mounted) setLoading(false)
             }
         }
@@ -184,28 +136,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         initializeAuth()
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
             if (!mounted) return
 
-            console.log('Auth state changed:', event)
             setSession(newSession)
             setUser(newSession?.user ?? null)
 
             if (newSession?.user) {
-                console.log('User signed in:', newSession.user.email)
                 // Fetch profile in background
                 fetchProfile(newSession.user.id).then(profileData => {
                     if (mounted) {
                         setProfile(profileData)
-                        if (profileData) {
-                            console.log('Profile loaded after auth change')
-                        } else {
-                            console.warn('Profile fetch returned null after auth change')
-                        }
                     }
                 })
             } else {
-                console.log('User signed out')
                 setProfile(null)
             }
 
@@ -241,27 +185,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signIn = async (email: string, password: string, _rememberMe: boolean = true) => {
         try {
-            // Set persistence based on rememberMe preference based on the supabase documentation
-            // But since changing persistence on the fly can be tricky, we'll try to just sign in
-            // and rely on the default behavior if rememberMe is true (which is default).
-            // If rememberMe is false, checking 'rememberMe' handling in Supabase is complex. 
-            // A safer cross-platform way without importing internal constants:
-            // The standard Supabase client is initialized with localStorage. 
-            // Changing it dynamically per-login is effectively done by:
-            /* 
-               const { error } = await supabase.auth.signInWithPassword({ email, password })
-               if (!rememberMe) {
-                   // If they don't want to be remembered, we could rely on session storage
-                   // checking doc: supabase.auth.setPersistence(browserSessionPersistence)
-               }
-            */
-
-            // To properly implement this we need to import persistence strategies
-            // import { browserLocalPersistence, browserSessionPersistence } from '@supabase/supabase-js'
-
-            // For now, to avoid build errors if imports are tricky, we will keep it simple.
-            // If the user wants this, we should really do it.
-
             const { error } = await supabase.auth.signInWithPassword({
                 email,
                 password
@@ -315,8 +238,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signOut = async () => {
         try {
             await supabase.auth.signOut()
-        } catch (err) {
-            console.error('Sign out error:', err)
+        } catch {
+            // Silent fail on sign out errors
         }
         // Optimistic clear
         setUser(null)
