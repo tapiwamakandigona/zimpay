@@ -38,18 +38,18 @@ export function SignUp() {
 
     // Debounced username check
     useEffect(() => {
-        if (formData.username.length < 3) {
-            setUsernameStatus('idle')
-            return
-        }
-
-        if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-            setUsernameStatus('invalid')
-            return
-        }
-
-        setUsernameStatus('checking')
         const timer = setTimeout(async () => {
+            if (formData.username.length < 3) {
+                setUsernameStatus('idle')
+                return
+            }
+
+            if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+                setUsernameStatus('invalid')
+                return
+            }
+
+            setUsernameStatus('checking')
             const { data } = await supabase
                 .from('profiles')
                 .select('username')
@@ -64,19 +64,19 @@ export function SignUp() {
 
     // Debounced phone check
     useEffect(() => {
-        const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
-        if (!cleanPhone) {
-            setPhoneStatus('idle')
-            return
-        }
-
-        if (!isValidPhone(cleanPhone)) {
-            setPhoneStatus('invalid')
-            return
-        }
-
-        setPhoneStatus('checking')
         const timer = setTimeout(async () => {
+            const cleanPhone = formData.phoneNumber.replace(/\s/g, '')
+            if (!cleanPhone) {
+                setPhoneStatus('idle')
+                return
+            }
+
+            if (!isValidPhone(cleanPhone)) {
+                setPhoneStatus('invalid')
+                return
+            }
+
+            setPhoneStatus('checking')
             // Get all possible phone formats to check
             const phoneFormats = getAllPhoneFormats(cleanPhone)
 
@@ -95,13 +95,13 @@ export function SignUp() {
 
     // Debounced email check
     useEffect(() => {
-        if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-            setEmailStatus('idle')
-            return
-        }
-
-        setEmailStatus('checking')
         const timer = setTimeout(async () => {
+            if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                setEmailStatus('idle')
+                return
+            }
+
+            setEmailStatus('checking')
             const { data } = await supabase
                 .from('profiles')
                 .select('email')
