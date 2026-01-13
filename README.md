@@ -62,27 +62,60 @@ Create an account and explore all the features! Test sending money between accou
 
 ## 📦 Installation
 
+### Prerequisites
+- Node.js 16+ and npm
+- A Supabase account ([supabase.com](https://supabase.com))
+
+### Setup Instructions
+
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/tapiwamakandigona/zimpay.git
 cd zimpay
 
-# Install dependencies
+# 2. Install dependencies
 npm install
 
-# Set up Supabase
-# 1. Create a project at supabase.com
-# 2. Update src/lib/supabase.ts with your credentials
+# 3. Set up environment variables
+# Copy the example environment file
+cp .env.example .env.local
 
-# Start development server
+# 4. Configure Supabase
+# Option A: Use the demo credentials (already in .env.example)
+# Option B: Create your own Supabase project:
+#   - Go to supabase.com and create a new project
+#   - Copy your project URL and anon key
+#   - Update .env.local with your credentials
+
+# 5. Start development server
 npm run dev
 
-# Build for production
+# 6. Build for production
 npm run build
 
-# Deploy to GitHub Pages
+# 7. Deploy to GitHub Pages
 npm run deploy
 ```
+
+### 🔐 Security Requirements
+
+> **IMPORTANT**: This project uses environment variables for sensitive credentials.
+
+- **Never commit `.env.local`** to version control (already in `.gitignore`)
+- **Database access requires authentication** - Row Level Security (RLS) is enabled
+- **Users can only access their own data** - profiles and transactions
+- See [`SECURITY_HOTFIX_INSTRUCTIONS.md`](SECURITY_HOTFIX_INSTRUCTIONS.md) for RLS policy details
+
+### Environment Variables
+
+Create a `.env.local` file in the project root:
+
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+> **Note**: The `VITE_` prefix is required for Vite to expose these variables to your app.
 
 ---
 
