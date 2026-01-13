@@ -18,7 +18,7 @@ const fixCommonTypos = (phone: string): string => {
     if (!phone) return ''
 
     // Remove all non-digit and non-plus chars
-    let cleaned = phone.replace(/[^\d+]/g, '')
+    const cleaned = phone.replace(/[^\d+]/g, '')
 
     // Fix: "263077..." -> "26377..." (Common error: Country code + Local leading zero)
     if (cleaned.startsWith('2630') && cleaned.length >= 12) {
@@ -54,7 +54,7 @@ export const normalizePhoneNumber = (phone: string): string => {
         if (phoneNumber && phoneNumber.isValid()) {
             return phoneNumber.number.toString() // Returns E.164 (e.g., +263773049503)
         }
-    } catch (error) {
+    } catch {
         // Fallback for edge cases or very broken numbers
         // console.warn('Phone normalization error:', error)
     }
@@ -111,7 +111,7 @@ export const formatPhoneForDisplay = (phone: string): string => {
         if (phoneNumber) {
             return phoneNumber.formatInternational() // +263 77 304 9503
         }
-    } catch (e) {
+    } catch {
         // Ignore
     }
     return phone
@@ -124,7 +124,7 @@ export const isValidPhone = (phone: string): boolean => {
     try {
         const fixed = fixCommonTypos(phone)
         return isValidLibPhone(fixed, DEFAULT_COUNTRY)
-    } catch (e) {
+    } catch {
         return false
     }
 }

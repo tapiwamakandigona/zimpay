@@ -183,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    const signIn = async (email: string, password: string, _rememberMe: boolean = true) => {
+    const signIn = async (email: string, password: string) => {
         try {
             const { error } = await supabase.auth.signInWithPassword({
                 email,

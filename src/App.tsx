@@ -1,16 +1,18 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { supabase } from './lib/supabase'
-import { Landing } from './pages/Landing'
-import { Login } from './pages/Login'
-import { SignUp } from './pages/SignUp'
-import { SignUpSuccess } from './pages/SignUpSuccess'
-import { EmailVerified } from './pages/EmailVerified'
-import { Dashboard } from './pages/Dashboard'
-import { UpdatePassword } from './pages/UpdatePassword'
 import './App.css'
+
+// Lazy load pages
+const Landing = lazy(() => import('./pages/Landing').then(module => ({ default: module.Landing })))
+const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })))
+const SignUp = lazy(() => import('./pages/SignUp').then(module => ({ default: module.SignUp })))
+const SignUpSuccess = lazy(() => import('./pages/SignUpSuccess').then(module => ({ default: module.SignUpSuccess })))
+const EmailVerified = lazy(() => import('./pages/EmailVerified').then(module => ({ default: module.EmailVerified })))
+const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })))
+const UpdatePassword = lazy(() => import('./pages/UpdatePassword').then(module => ({ default: module.UpdatePassword })))
 
 // Handle Supabase auth callbacks (email verification, password reset)
 // This runs before HashRouter to process tokens in the URL hash
@@ -106,44 +108,53 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   return (
-    <Routes>
-      {/* Landing Page - Public */}
-      <Route path="/" element={<Landing />} />
+    <Suspense fallback={<LoadingScreen message="Loading..." />}>
+      <Routes>
+        {/* Landing Page - Public */}
+        <Route path="/" element={<Landing />} />
 
-      {/* Auth Pages */}
-      <Route path="/login" element={
-        <PublicRoute>
-          <Login />
-        </PublicRoute>
-      } />
-      <Route path="/signup" element={
-        <PublicRoute>
-          <SignUp />
-        </PublicRoute>
-      } />
-      <Route path="/signup-success" element={<SignUpSuccess />} />
-      <Route path="/email-verified" element={<EmailVerified />} />
+        {/* Auth Pages */}
+        <Route path="/login" element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } />
+        <Route path="/signup" element={
+          <PublicRoute>
+            <SignUp />
+          </PublicRoute>
+        } />
+        <Route path="/signup-success" element={<SignUpSuccess />} />
+        <Route path="/email-verified" element={<EmailVerified />} />
 
-      {/* Protected Dashboard */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/update-password" element={
-        <ProtectedRoute>
-          <UpdatePassword />
-        </ProtectedRoute>
-      } />
+        {/* Protected Dashboard */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/update-password" element={
+          <ProtectedRoute>
+            <UpdatePassword />
+          </ProtectedRoute>
+        } />
 
-      {/* Catch any other routes */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Catch any other routes */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
 
 function App() {
   const { isProcessing, redirectTo } = useAuthCallback()
+
+  // If we processed an auth callback, redirect to the appropriate page
+  useEffect(() => {
+    if (!isProcessing && redirectTo) {
+      window.location.hash = redirectTo
+    }
+  }, [isProcessing, redirectTo])
 
   // Show loading while processing auth callback
   if (isProcessing) {
@@ -152,11 +163,6 @@ function App() {
         <LoadingScreen message="Verifying your account..." />
       </ThemeProvider>
     )
-  }
-
-  // If we processed an auth callback, redirect to the appropriate page
-  if (redirectTo) {
-    window.location.hash = redirectTo
   }
 
   return (
