@@ -196,6 +196,14 @@
     cursor: wait;
 }
 
+/* Search hint text */
+.search-hint {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* Recipient Card - Enhanced */
 .recipient-card {
     display: flex;

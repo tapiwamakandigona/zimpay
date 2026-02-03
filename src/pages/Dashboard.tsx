@@ -224,12 +224,61 @@ export function Dashboard() {
 
     if (loading) {
         return (
-            <div className="loading-screen">
-                <div className="loading-content">
-                    <div className="loading-logo">💳</div>
-                    <div className="spinner"></div>
-                    <p className="loading-text">Preparing your dashboard...</p>
-                </div>
+            <div className="dashboard">
+                <header className="dashboard-header">
+                    <div className="header-left">
+                        <div className="logo-mini">
+                            <span>💳</span>
+                            <span className="logo-text">ZimPay</span>
+                        </div>
+                    </div>
+                </header>
+
+                <main className="dashboard-main">
+                    {/* Skeleton Balance Card */}
+                    <div className="skeleton skeleton-balance"></div>
+
+                    {/* Skeleton Quick Actions */}
+                    <div className="quick-actions">
+                        <div className="skeleton skeleton-action"></div>
+                        <div className="skeleton skeleton-action"></div>
+                        <div className="skeleton skeleton-action"></div>
+                        <div className="skeleton skeleton-action"></div>
+                    </div>
+
+                    {/* Skeleton Activity */}
+                    <div className="transactions-section">
+                        <div className="section-header">
+                            <div className="skeleton skeleton-text medium"></div>
+                        </div>
+                        <div className="transactions-list">
+                            <div className="skeleton-row">
+                                <div className="skeleton skeleton-avatar"></div>
+                                <div className="skeleton-content">
+                                    <div className="skeleton skeleton-text short"></div>
+                                    <div className="skeleton skeleton-text medium"></div>
+                                </div>
+                                <div className="skeleton skeleton-amount"></div>
+                            </div>
+                            <div className="skeleton-row">
+                                <div className="skeleton skeleton-avatar"></div>
+                                <div className="skeleton-content">
+                                    <div className="skeleton skeleton-text short"></div>
+                                    <div className="skeleton skeleton-text medium"></div>
+                                </div>
+                                <div className="skeleton skeleton-amount"></div>
+                            </div>
+                            <div className="skeleton-row">
+                                <div className="skeleton skeleton-avatar"></div>
+                                <div className="skeleton-content">
+                                    <div className="skeleton skeleton-text short"></div>
+                                    <div className="skeleton skeleton-text medium"></div>
+                                </div>
+                                <div className="skeleton skeleton-amount"></div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
             </div>
         )
     }
