@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getAllPhoneFormats } from '../lib/phoneUtils'
+import { useDebounce, formatCurrency } from '../lib/utils'
 import type { Profile } from '../lib/supabase'
 import './SendMoney.css'
 
@@ -18,31 +19,25 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
     const [description, setDescription] = useState('')
     const [step, setStep] = useState<'form' | 'confirm' | 'success'>('form')
     const [loading, setLoading] = useState(false)
+    const [searching, setSearching] = useState(false)
     const [error, setError] = useState('')
     const [recipientProfile, setRecipientProfile] = useState<Profile | null>(null)
     const [isZimBetRecipient, setIsZimBetRecipient] = useState(false)
 
-    const handleSearch = async () => {
-        // ========== INPUT VALIDATION ==========
-        const rawInput = recipient.trim()
+    const performSearch = useCallback(async (searchValue: string) => {
+        const rawInput = searchValue.trim()
 
-        if (!rawInput) {
-            setError('Please enter a username, email, or phone number')
+        if (!rawInput || rawInput.length < 2) {
+            setRecipientProfile(null)
+            setSearching(false)
             return
         }
 
-        // Check minimum length
-        if (rawInput.length < 2) {
-            setError('Please enter at least 2 characters')
-            return
-        }
-
-        setLoading(true)
+        setSearching(true)
         setError('')
         setRecipientProfile(null)
         setIsZimBetRecipient(false)
 
-        // ========== INPUT CLASSIFICATION ==========
         // Remove @ prefix for processing
         const searchTerm = rawInput.replace(/^@+/, '').trim()
 
@@ -50,7 +45,6 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         const isZimBetUsername = searchTerm.toLowerCase().startsWith('zm-')
 
         if (isZimBetUsername) {
-            // Search in zimbet_accounts table
             try {
                 const { data: zimbetAccount, error: zimbetError } = await supabase
                     .from('zimbet_accounts')
@@ -59,12 +53,11 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                     .single()
 
                 if (zimbetError || !zimbetAccount) {
-                    setError(`ZimBet account "@${searchTerm}" not found. Check the username.`)
-                    setLoading(false)
+                    setError(`ZimBet account "@${searchTerm}" not found.`)
+                    setSearching(false)
                     return
                 }
 
-                // Create a Profile-like object for the UI
                 setRecipientProfile({
                     id: zimbetAccount.user_id,
                     email: '',
@@ -77,13 +70,11 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                 })
                 setIsZimBetRecipient(true)
                 setError('')
-                setLoading(false)
-                return
             } catch {
-                setError('Error looking up ZimBet account. Try again.')
-                setLoading(false)
-                return
+                setError('Error looking up ZimBet account.')
             }
+            setSearching(false)
+            return
         }
 
         // Detect input type
@@ -91,24 +82,21 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         const isPhoneNumber = /^[\d\s+\-()]+$/.test(searchTerm) && searchTerm.replace(/\D/g, '').length >= 9
         const isUsername = !isEmail && !isPhoneNumber
 
-        // Validate username format if it's a username
+        // Validate username format
         if (isUsername) {
-            // Remove any remaining special chars except underscore
             const cleanUsername = searchTerm.toLowerCase().replace(/[^a-z0-9_]/g, '')
             if (cleanUsername.length < 2) {
-                setError('Username must be at least 2 characters (letters, numbers, underscore only)')
-                setLoading(false)
+                setError('Username must be at least 2 characters')
+                setSearching(false)
                 return
             }
             if (cleanUsername !== searchTerm.toLowerCase()) {
-                // Has special characters - warn user
-                setError(`Invalid characters in username. Did you mean "@${cleanUsername}"?`)
-                setLoading(false)
+                setError(`Invalid characters. Did you mean "@${cleanUsername}"?`)
+                setSearching(false)
                 return
             }
         }
 
-        // ========== SEARCH WITH TIMEOUT ==========
         const TIMEOUT_MS = 10000
         const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS)
@@ -119,82 +107,56 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
             let searchMethod = ''
 
             if (isEmail) {
-                // ===== SEARCH BY EMAIL =====
                 searchMethod = 'email'
                 const result = await Promise.race([
-                    supabase
-                        .from('profiles')
-                        .select('*')
-                        .eq('email', searchTerm.toLowerCase())
-                        .maybeSingle(),
+                    supabase.from('profiles').select('*').eq('email', searchTerm.toLowerCase()).maybeSingle(),
                     timeoutPromise
                 ])
                 data = result.data
                 if (result.error) throw new Error('DB_ERROR')
 
             } else if (isPhoneNumber) {
-                // ===== SEARCH BY PHONE =====
                 searchMethod = 'phone'
                 const phoneFormats = getAllPhoneFormats(searchTerm)
-
                 const result = await Promise.race([
-                    supabase
-                        .from('profiles')
-                        .select('*')
-                        .in('phone_number', phoneFormats)
-                        .limit(1)
-                        .maybeSingle(),
+                    supabase.from('profiles').select('*').in('phone_number', phoneFormats).limit(1).maybeSingle(),
                     timeoutPromise
                 ])
                 data = result.data
                 if (result.error) throw new Error('DB_ERROR')
 
             } else {
-                // ===== SEARCH BY USERNAME =====
                 searchMethod = 'username'
                 const username = searchTerm.toLowerCase()
-
-                // Try exact match first
                 const result = await Promise.race([
-                    supabase
-                        .from('profiles')
-                        .select('*')
-                        .eq('username', username)
-                        .maybeSingle(),
+                    supabase.from('profiles').select('*').eq('username', username).maybeSingle(),
                     timeoutPromise
                 ])
                 data = result.data
                 if (result.error) throw new Error('DB_ERROR')
 
-                // If no exact match, try case-insensitive partial match as hint
+                // Suggest similar usernames if not found
                 if (!data) {
                     const partialResult = await Promise.race([
-                        supabase
-                            .from('profiles')
-                            .select('username')
-                            .ilike('username', `%${username}%`)
-                            .limit(3),
+                        supabase.from('profiles').select('username').ilike('username', `%${username}%`).limit(3),
                         timeoutPromise
                     ])
-
                     if (partialResult.data && partialResult.data.length > 0) {
                         const suggestions = partialResult.data.map(p => `@${p.username}`).join(', ')
                         setError(`User "@${username}" not found. Did you mean: ${suggestions}?`)
-                        setLoading(false)
+                        setSearching(false)
                         return
                     }
                 }
             }
 
-            // ========== RESULT HANDLING ==========
             if (!data) {
-                // Specific error messages based on search type
                 if (searchMethod === 'email') {
-                    setError('No account found with this email address.')
+                    setError('No account found with this email.')
                 } else if (searchMethod === 'phone') {
-                    setError('No account found with this phone number. Try different format (e.g., 0773123456).')
+                    setError('No account found with this phone number.')
                 } else {
-                    setError(`User "@${searchTerm}" not found. Check the spelling.`)
+                    setError(`User "@${searchTerm}" not found.`)
                 }
                 setRecipientProfile(null)
             } else if (data.id === user?.id) {
@@ -205,22 +167,39 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                 setError('')
             }
         } catch (err) {
-            // ========== ERROR HANDLING ==========
             if (err instanceof Error) {
                 if (err.message === 'TIMEOUT') {
-                    setError('Search timed out. Please check your connection and try again.')
-                } else if (err.message === 'DB_ERROR') {
-                    setError('Database error. Please try again later.')
+                    setError('Search timed out. Check your connection.')
                 } else {
                     setError('Something went wrong. Please try again.')
                 }
-            } else {
-                setError('Unexpected error. Please try again.')
             }
             setRecipientProfile(null)
         }
 
-        setLoading(false)
+        setSearching(false)
+    }, [user?.id])
+
+    // Debounced search - auto-triggers 400ms after user stops typing
+    const debouncedSearch = useDebounce(performSearch, 400)
+
+    const handleRecipientChange = (value: string) => {
+        setRecipient(value)
+        setRecipientProfile(null)
+        setError('')
+        
+        // Auto-search after debounce
+        if (value.trim().length >= 2) {
+            debouncedSearch(value)
+        }
+    }
+
+    const handleManualSearch = () => {
+        if (recipient.trim().length >= 2) {
+            performSearch(recipient)
+        } else {
+            setError('Please enter at least 2 characters')
+        }
     }
 
     const handleContinue = () => {
@@ -246,6 +225,12 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
             return
         }
 
+        // Check for reasonable decimal places (max 2)
+        if (amount.includes('.') && amount.split('.')[1]?.length > 2) {
+            setError('Amount can have at most 2 decimal places')
+            return
+        }
+
         setError('')
         setStep('confirm')
     }
@@ -256,15 +241,16 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         setLoading(true)
         setError('')
 
-        const transferAmount = Math.floor(parseFloat(amount))
+        // Round to 2 decimal places to avoid floating point issues
+        const transferAmount = Math.round(parseFloat(amount) * 100) / 100
 
-        // Handle ZimBet recipient differently
+        // Handle ZimBet recipient
         if (isZimBetRecipient) {
             try {
-                // 1. Deduct from sender's ZimPay balance
+                // Use a transaction-like approach: deduct first, then add
                 const { error: deductError } = await supabase
                     .from('profiles')
-                    .update({ balance: Math.floor(profile.balance - transferAmount) })
+                    .update({ balance: Math.round((profile.balance - transferAmount) * 100) / 100 })
                     .eq('id', user.id)
 
                 if (deductError) {
@@ -273,14 +259,13 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                     return
                 }
 
-                // 2. Add to ZimBet account balance
                 const { error: addError } = await supabase
                     .from('zimbet_accounts')
-                    .update({ balance: Math.floor(recipientProfile.balance + transferAmount) })
+                    .update({ balance: Math.round((recipientProfile.balance + transferAmount) * 100) / 100 })
                     .eq('username', recipientProfile.username)
 
                 if (addError) {
-                    // Rollback
+                    // Rollback sender's balance
                     await supabase
                         .from('profiles')
                         .update({ balance: profile.balance })
@@ -290,16 +275,14 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                     return
                 }
 
-                // 3. Record transaction
-                await supabase
-                    .from('transactions')
-                    .insert({
-                        sender_id: user.id,
-                        receiver_id: recipientProfile.id,
-                        amount: transferAmount,
-                        description: description || `Transfer to ZimBet @${recipientProfile.username}`,
-                        status: 'completed'
-                    })
+                // Record transaction
+                await supabase.from('transactions').insert({
+                    sender_id: user.id,
+                    receiver_id: recipientProfile.id,
+                    amount: transferAmount,
+                    description: description || `Transfer to ZimBet @${recipientProfile.username}`,
+                    status: 'completed'
+                })
 
                 setStep('success')
                 setLoading(false)
@@ -311,14 +294,13 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
             }
         }
 
-        // Regular ZimPay to ZimPay transfer
-        const { data, error: transferError } = await supabase
-            .rpc('transfer_money', {
-                p_sender_id: user.id,
-                p_receiver_identifier: recipientProfile.username,
-                p_amount: transferAmount,
-                p_description: description || null
-            })
+        // Regular ZimPay to ZimPay transfer via RPC
+        const { data, error: transferError } = await supabase.rpc('transfer_money', {
+            p_sender_id: user.id,
+            p_receiver_identifier: recipientProfile.username,
+            p_amount: transferAmount,
+            p_description: description || null
+        })
 
         if (transferError) {
             setError(transferError.message)
@@ -336,13 +318,6 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
 
         setStep('success')
         setLoading(false)
-    }
-
-    const formatCurrency = (num: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        }).format(num)
     }
 
     const handleClose = (e?: React.MouseEvent) => {
@@ -377,26 +352,26 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                             {error && <div className="error-message">{error}</div>}
 
                             <div className="form-group">
-                                <label>Recipient Username or Phone</label>
+                                <label>Recipient Username, Email, or Phone</label>
                                 <div className="input-with-button">
                                     <input
                                         type="text"
                                         value={recipient}
-                                        onChange={(e) => {
-                                            setRecipient(e.target.value)
-                                            setRecipientProfile(null)
-                                        }}
-                                        placeholder="@username or 0773..."
+                                        onChange={(e) => handleRecipientChange(e.target.value)}
+                                        placeholder="@username, email, or 0773..."
                                     />
                                     <button
                                         type="button"
                                         className="btn btn-search"
-                                        onClick={handleSearch}
-                                        disabled={loading}
+                                        onClick={handleManualSearch}
+                                        disabled={searching}
                                     >
-                                        {loading ? '...' : '🔍'}
+                                        {searching ? '...' : '🔍'}
                                     </button>
                                 </div>
+                                {searching && (
+                                    <p className="search-hint">Searching...</p>
+                                )}
                             </div>
 
                             {recipientProfile && (
@@ -438,13 +413,14 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
                                     placeholder="What's this for?"
+                                    maxLength={100}
                                 />
                             </div>
 
                             <button
                                 className="btn btn-primary btn-block"
                                 onClick={handleContinue}
-                                disabled={!recipientProfile || !amount}
+                                disabled={!recipientProfile || !amount || searching}
                             >
                                 Continue
                             </button>
@@ -488,6 +464,7 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
                                 <button
                                     className="btn btn-outline btn-block"
                                     onClick={() => setStep('form')}
+                                    disabled={loading}
                                 >
                                     Back
                                 </button>
