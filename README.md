@@ -1,5 +1,8 @@
 # 💳 ZimPay - Modern Banking App
 
+[![Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://tapiwamakandigona.github.io/zimpay/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+
 A sleek, modern banking simulation app built with React, TypeScript & Supabase. Experience real-time money transfers, beautiful UI themes, and secure authentication.
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Try_It_Now-brightgreen?style=for-the-badge)](https://tapiwamakandigona.github.io/zimpay/)
