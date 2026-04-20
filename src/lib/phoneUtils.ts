@@ -18,7 +18,12 @@ const fixCommonTypos = (phone: string): string => {
     if (!phone) return ''
 
     // Remove all non-digit and non-plus chars
-    const cleaned = phone.replace(/[^\d+]/g, '')
+    let cleaned = phone.replace(/[^\d+]/g, '')
+
+    // Fix: "00263..." -> "+263..." (Double zero prefix)
+    if (cleaned.startsWith('00')) {
+        cleaned = '+' + cleaned.substring(2)
+    }
 
     // Fix: "263077..." -> "26377..." (Common error: Country code + Local leading zero)
     if (cleaned.startsWith('2630') && cleaned.length >= 12) {
@@ -28,11 +33,6 @@ const fixCommonTypos = (phone: string): string => {
     // Fix: "+263077..." -> "+26377..."
     if (cleaned.startsWith('+2630') && cleaned.length >= 13) {
         return '+263' + cleaned.substring(5)
-    }
-
-    // Fix: "00263..." -> "+263..." (Double zero prefix)
-    if (cleaned.startsWith('00')) {
-        return '+' + cleaned.substring(2)
     }
 
     return cleaned
