@@ -33,7 +33,7 @@
 - See [`SECURITY_HOTFIX_INSTRUCTIONS.md`](file:///C:/Users/Tapiwa/Desktop/Coding%20Projects/zimpay/SECURITY_HOTFIX_INSTRUCTIONS.md)
 
 **Critical Actions Required (Do This Now):**
-1. Open [Supabase Dashboard](https://supabase.com/dashboard/project/ilhwoebtxxkudihfgmub)
+1. Open your [Supabase Dashboard](https://supabase.com/dashboard)
 2. Navigate to **Database** → **SQL Editor**
 3. Copy the contents of `supabase/migrations/001_fix_rls_policies.sql`
 4. Paste and run the SQL script
@@ -103,8 +103,8 @@ If you need to temporarily revert these changes:
 1. **Restore hardcoded credentials:**
    ```typescript
    // In src/lib/supabase.ts
-   const supabaseUrl = 'https://ilhwoebtxxkudihfgmub.supabase.co'
-   const supabaseAnonKey = 'eyJhbGciOi...'
+   const supabaseUrl = 'https://<YOUR_PROJECT_ID>.supabase.co'
+   const supabaseAnonKey = '<YOUR_ANON_KEY>'
    ```
 
 2. **Run git command:**

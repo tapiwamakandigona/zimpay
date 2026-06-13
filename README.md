@@ -54,11 +54,11 @@ Create an account and explore all the features! Test sending money between accou
 
 | Technology | Purpose |
 |------------|---------|
-| **React 18** | UI Components & State |
-| **TypeScript** | Type-safe development |
+| **React 19** | UI Components & State |
+| **TypeScript 5** | Type-safe development |
 | **Supabase** | Backend (Auth, Database, Realtime) |
-| **React Router v6** | Client-side routing |
-| **Vite** | Build tool & dev server |
+| **React Router v7** | Client-side routing |
+| **Vite 7** | Build tool & dev server |
 | **CSS3** | Styling with CSS Variables |
 
 ---
@@ -66,7 +66,7 @@ Create an account and explore all the features! Test sending money between accou
 ## 📦 Installation
 
 ### Prerequisites
-- Node.js 16+ and npm
+- Node.js 20+ and npm (see `.nvmrc`)
 - A Supabase account ([supabase.com](https://supabase.com))
 
 ### Setup Instructions
@@ -126,20 +126,26 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ```
 src/
-├── components/        # Reusable UI components
-│   └── SendMoney.tsx  # Money transfer flow
-├── context/           # React Context providers
-│   ├── AuthContext    # Authentication state
-│   └── ThemeContext   # Theme management
-├── lib/               # Utilities & config
-│   └── supabase.ts    # Supabase client
-├── pages/             # Page components
-│   ├── Landing.tsx    # Welcome page
-│   ├── Login.tsx      # Authentication
-│   ├── SignUp.tsx     # Registration
-│   └── Dashboard.tsx  # Main app interface
-├── App.tsx            # Root component
-└── main.tsx           # Entry point
+├── components/           # Reusable UI components
+│   └── SendMoney.tsx     # Money transfer flow with user search
+├── context/              # React Context providers
+│   ├── AuthContext.tsx   # Authentication state & session management
+│   └── ThemeContext.tsx  # Dark/light theme toggle
+├── lib/                  # Utilities & config
+│   ├── supabase.ts       # Supabase client singleton & DB types
+│   ├── phoneUtils.ts     # Phone number parsing & normalization
+│   ├── countries.ts      # Country codes & flag helpers
+│   └── utils.ts          # Shared hooks (useDebounce) & formatters
+├── pages/                # Page components
+│   ├── Landing.tsx       # Marketing / welcome page
+│   ├── Login.tsx         # Email + password authentication
+│   ├── SignUp.tsx        # Registration with real-time validation
+│   ├── SignUpSuccess.tsx # Post-signup email verification prompt
+│   ├── EmailVerified.tsx # Email confirmed success page
+│   ├── UpdatePassword.tsx# Password reset form
+│   └── Dashboard.tsx     # Main app (balance, history, profile, send)
+├── App.tsx               # Root component with routing & auth callback
+└── main.tsx              # Entry point
 ```
 
 ---

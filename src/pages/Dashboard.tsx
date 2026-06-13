@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
 import type { Transaction, Profile } from '../lib/supabase'
+import { formatCurrency, formatRelativeDate } from '../lib/utils'
 import { SendMoney } from '../components/SendMoney'
 import './Dashboard.css'
 
@@ -116,33 +117,6 @@ export function Dashboard() {
     const handleSignOut = async () => {
         await signOut()
         navigate('/login')
-    }
-
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2
-        }).format(amount)
-    }
-
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString)
-        const now = new Date()
-        const diffMs = now.getTime() - date.getTime()
-        const diffMins = Math.floor(diffMs / 60000)
-        const diffHours = Math.floor(diffMs / 3600000)
-        const diffDays = Math.floor(diffMs / 86400000)
-
-        if (diffMins < 1) return 'Just now'
-        if (diffMins < 60) return `${diffMins}m ago`
-        if (diffHours < 24) return `${diffHours}h ago`
-        if (diffDays < 7) return `${diffDays}d ago`
-
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric'
-        })
     }
 
     const getTransactionType = (tx: Transaction) => {
@@ -443,7 +417,7 @@ export function Dashboard() {
                                                     </p>
                                                     <p className="tx-meta">
                                                         <span className="tx-username">@{otherUser?.username}</span>
-                                                        <span className="tx-date">{formatDate(tx.created_at)}</span>
+                                                        <span className="tx-date">{formatRelativeDate(tx.created_at)}</span>
                                                     </p>
                                                 </div>
                                                 <div className={`tx-amount ${type}`}>
@@ -497,7 +471,7 @@ export function Dashboard() {
                                                 </p>
                                                 <p className="tx-meta">
                                                     <span className="tx-username">@{otherUser?.username}</span>
-                                                    <span className="tx-date">{formatDate(tx.created_at)}</span>
+                                                    <span className="tx-date">{formatRelativeDate(tx.created_at)}</span>
                                                 </p>
                                                 {tx.description && (
                                                     <p className="tx-note">"{tx.description}"</p>
