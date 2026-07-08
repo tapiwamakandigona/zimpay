@@ -389,7 +389,7 @@ export function Dashboard() {
                                 <span>Profile</span>
                             </button>
                             <a
-                                href="https://tapiwamakandigona.github.io/zimbet/"
+                                href="https://zimbet.tapiwa.me/"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="action-btn zimbet"
