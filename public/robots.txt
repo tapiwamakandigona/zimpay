@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://tapiwamakandigona.github.io/zimpay/sitemap.xml
+Sitemap: https://zimpay.tapiwa.me/sitemap.xml
