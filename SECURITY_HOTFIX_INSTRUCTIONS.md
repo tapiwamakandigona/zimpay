@@ -19,7 +19,7 @@ This hotfix addresses **2 critical vulnerabilities** discovered during the Deep 
 
 ### Option A: Via Supabase Dashboard (Recommended)
 
-1. Log into [Supabase Dashboard](https://supabase.com/dashboard/project/ilhwoebtxxkudihfgmub)
+1. Log into your [Supabase Dashboard](https://supabase.com/dashboard)
 2. Navigate to **Database** → **SQL Editor**
 3. Click **New Query**
 4. Copy the entire contents of [`supabase/migrations/001_fix_rls_policies.sql`](file:///C:/Users/Tapiwa/Desktop/Coding%20Projects/zimpay/supabase/migrations/001_fix_rls_policies.sql)
@@ -63,7 +63,7 @@ supabase db push
 2. Open browser DevTools → Console
 3. Try to fetch profiles:
    ```javascript
-   fetch('https://ilhwoebtxxkudihfgmub.supabase.co/rest/v1/profiles', {
+   fetch('https://<YOUR_PROJECT_ID>.supabase.co/rest/v1/profiles', {
      headers: {
        'apikey': 'YOUR_ANON_KEY',
        'Authorization': 'Bearer YOUR_ANON_KEY'
