@@ -244,54 +244,34 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         // Round to 2 decimal places to avoid floating point issues
         const transferAmount = Math.round(parseFloat(amount) * 100) / 100
 
-        // Handle ZimBet recipient
+        // Handle ZimBet recipient.
+        // Balance changes are server-authoritative: the `transfer_to_zimbet`
+        // SECURITY DEFINER RPC validates ownership + funds and moves money
+        // atomically. Clients can no longer write `balance` directly.
         if (isZimBetRecipient) {
-            try {
-                // Use a transaction-like approach: deduct first, then add
-                const { error: deductError } = await supabase
-                    .from('profiles')
-                    .update({ balance: Math.round((profile.balance - transferAmount) * 100) / 100 })
-                    .eq('id', user.id)
+            const { data, error: transferError } = await supabase.rpc('transfer_to_zimbet', {
+                p_sender_id: user.id,
+                p_zimbet_username: recipientProfile.username,
+                p_amount: transferAmount,
+                p_description: description || null
+            })
 
-                if (deductError) {
-                    setError('Failed to process transfer. Try again.')
-                    setLoading(false)
-                    return
-                }
-
-                const { error: addError } = await supabase
-                    .from('zimbet_accounts')
-                    .update({ balance: Math.round((recipientProfile.balance + transferAmount) * 100) / 100 })
-                    .eq('username', recipientProfile.username)
-
-                if (addError) {
-                    // Rollback sender's balance
-                    await supabase
-                        .from('profiles')
-                        .update({ balance: profile.balance })
-                        .eq('id', user.id)
-                    setError('Transfer failed. Balance restored.')
-                    setLoading(false)
-                    return
-                }
-
-                // Record transaction
-                await supabase.from('transactions').insert({
-                    sender_id: user.id,
-                    receiver_id: recipientProfile.id,
-                    amount: transferAmount,
-                    description: description || `Transfer to ZimBet @${recipientProfile.username}`,
-                    status: 'completed'
-                })
-
-                setStep('success')
-                setLoading(false)
-                return
-            } catch {
-                setError('Something went wrong. Try again.')
+            if (transferError) {
+                setError(transferError.message)
                 setLoading(false)
                 return
             }
+
+            const result = data as { success: boolean; error?: string }
+            if (!result?.success) {
+                setError(result?.error || 'Transfer failed')
+                setLoading(false)
+                return
+            }
+
+            setStep('success')
+            setLoading(false)
+            return
         }
 
         // Regular ZimPay to ZimPay transfer via RPC
