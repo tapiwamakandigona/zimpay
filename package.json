@@ -13,8 +13,8 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.112.3",
-    "libphonenumber-js": "^1.13.11",
+    "@supabase/supabase-js": "^2.112.4",
+    "libphonenumber-js": "^1.13.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2"
