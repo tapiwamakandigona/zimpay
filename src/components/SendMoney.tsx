@@ -178,7 +178,7 @@ export function SendMoney({ onClose, onSuccess }: SendMoneyProps) {
         }
 
         setSearching(false)
-    }, [user?.id])
+    }, [user])
 
     // Debounced search - auto-triggers 400ms after user stops typing
     const debouncedSearch = useDebounce(performSearch, 400)

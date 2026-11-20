@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Set a max timeout for loading state (8 seconds for mobile compatibility)
         const loadingTimeout = setTimeout(() => {
-            if (mounted && loading) {
+            if (mounted) {
                 setLoading(false)
             }
         }, 8000)

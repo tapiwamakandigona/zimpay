@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -37,9 +37,10 @@ export function Dashboard() {
             const timeout = setTimeout(() => {
                 setProfileTimeout(true)
             }, 10000)
-            return () => clearTimeout(timeout)
-        } else {
-            setProfileTimeout(false)
+            return () => {
+                clearTimeout(timeout)
+                setProfileTimeout(false)
+            }
         }
     }, [profile, user])
 
@@ -50,42 +51,7 @@ export function Dashboard() {
         setRetrying(false)
     }
 
-    useEffect(() => {
-        if (!user) {
-            navigate('/login')
-            return
-        }
-
-        fetchTransactions()
-
-        let subscription: ReturnType<typeof supabase.channel> | null = null
-        try {
-            subscription = supabase
-                .channel('transactions')
-                .on('postgres_changes',
-                    { event: 'INSERT', schema: 'public', table: 'transactions' },
-                    () => {
-                        fetchTransactions()
-                        refreshProfile()
-                    }
-                )
-                .subscribe()
-        } catch {
-            // Continue without real-time updates if subscription fails
-        }
-
-        return () => {
-            if (subscription) {
-                try {
-                    subscription.unsubscribe()
-                } catch {
-                    // Silent fail on unsubscribe errors
-                }
-            }
-        }
-    }, [user, navigate])
-
-    const fetchTransactions = async () => {
+    const fetchTransactions = useCallback(async () => {
         if (!user) return
 
         try {
@@ -112,7 +78,45 @@ export function Dashboard() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [user])
+
+    useEffect(() => {
+        if (!user) {
+            navigate('/login')
+            return
+        }
+
+        const loadTimer = setTimeout(() => {
+            void fetchTransactions()
+        }, 0)
+
+        let subscription: ReturnType<typeof supabase.channel> | null = null
+        try {
+            subscription = supabase
+                .channel('transactions')
+                .on('postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'transactions' },
+                    () => {
+                        void fetchTransactions()
+                        void refreshProfile()
+                    }
+                )
+                .subscribe()
+        } catch {
+            // Continue without real-time updates if subscription fails
+        }
+
+        return () => {
+            clearTimeout(loadTimer)
+            if (subscription) {
+                try {
+                    subscription.unsubscribe()
+                } catch {
+                    // Silent fail on unsubscribe errors
+                }
+            }
+        }
+    }, [user, navigate, fetchTransactions, refreshProfile])
 
     const handleSignOut = async () => {
         await signOut()
